@@ -23,7 +23,12 @@ export default async function prepareChatContext({
       bio: ${profileData}`,
     },
   ];
-  chatContext.push(...messageHistory);
+  chatContext.push(
+    ...messageHistory.map((message) => ({
+      role: message.role,
+      content: message.content,
+    }))
+  );
   chatContext.push({ role: Role.user, content: newMessages[0].text.body });
 
   return chatContext;
