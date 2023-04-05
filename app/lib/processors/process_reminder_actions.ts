@@ -1,10 +1,11 @@
+import { User } from '@prisma/client';
 import { getCalendarClient } from '~/services/google.server';
 
 /**
  * Lists the next 10 events on the user's primary calendar.
  */
-export async function listEvents({ userId }: { userId: number }) {
-  const calendar = await getCalendarClient({ userId });
+export async function listEvents({ user }: { user: User }) {
+  const calendar = await getCalendarClient({ user });
 
   const res = await calendar.events.list({
     calendarId: 'primary',

@@ -40,8 +40,6 @@ export async function action({ request }: ActionArgs) {
   let statusCode = 400;
   let response = null;
 
-  // console.log(JSON.stringify(body, null, 2));
-
   try {
     if (body.object !== 'whatsapp_business_account') {
       response = 'UNKOWN_OBJECT';

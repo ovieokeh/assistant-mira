@@ -56,7 +56,6 @@ export const action = async ({ request }: ActionArgs) => {
 
   const existingUser = await getUserProfile({ phone });
   if (existingUser) {
-    console.log('existing user', existingUser);
     return json(
       {
         errors: {

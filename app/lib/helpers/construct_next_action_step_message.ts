@@ -9,7 +9,6 @@ export default async function constructNextActionStepMessage({
   args: ChatActionArgs;
 }) {
   const argsIds = Object.keys(args);
-  console.log('missing args', args);
   const missingArgsRequestMessage = `I need the following information to perform the ${action} action: ${argsIds.join(
     ', '
   )}`;

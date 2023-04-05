@@ -2,6 +2,23 @@ import { MessagingState } from '@prisma/client';
 import { CHAT_ACTION, POSSIBLE_ACTIONS } from './actions';
 import { DEFAULT_PERSONALITY_TRAITS } from './traits';
 
+export const CREATE_SUMMARY_PRIMER = (dataType: string, jsonData: string) => `
+  You are a ${DEFAULT_PERSONALITY_TRAITS.join(
+    ', '
+  )} digital assistant. You have been asked to create a summary of ${dataType} data.
+
+  Requirements:
+  - The summary must be a well-structured, easy-to-read, and punctuated chat message that describes the data.
+  - The summary must contain as much information that is relevant to the user as possible.
+  - The summary must include any mentions of people, places, internet links, and other entities.
+  - Lists of information must be in the form of a bulleted list.
+  
+  ${dataType} data:
+  \`\`\`
+  ${jsonData}
+  \`\`\`
+`;
+
 export const ACTION_PRIMER = (mode: MessagingState) => `
 This is a list of possible tasks supported by an API — ${POSSIBLE_ACTIONS.join(
   ', '
@@ -51,12 +68,26 @@ export const CHAT_PRIMER = `
 `;
 
 export const NATURAL_LANGUAGE_TO_DATE_PROMPTER = (text: string) => `
-  Return a Javascript function to convert the following natural language date into yyyy-mm-dd and hh:mm format.
+  Return a Javascript IIFE function to convert the following natural language date into yyyy-mm-dd and hh:mm format.
   If the date doesn't resolve to a valid date, the function should simply return an empty response
 
   The function should be complete, valid, and executable.
   Do not add a console.log statement to the code.
-  Here's the the natural language date you need to convert: ${text}
+  Do not use any external libraries, packages, or APIs.
+
+  Here are some examples and their expected output:
+  - "tomorrow at 3pm" => "2020-12-31 15:00"
+  - "next week" => "2021-01-07 00:00"
+  - "next week at 3pm" => "2021-01-07 15:00"
+  - "today" => "2021-01-11"
+  - "yesterday" => "2021-01-11"
+
+  Note that these are just examples and your function should be able to handle any date in a similar format.
+
+  Here's the the natural language date you need to convert:
+  ${text}
+
+  Your response:
 `;
 
 // export const USER_PRIMER_EXAMPLE = `

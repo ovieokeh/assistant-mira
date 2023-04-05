@@ -27,7 +27,6 @@ export default async function processChatMessages(
       text: `I don't know who you are. Please register with me first at mira-assistant-staging.fly.dev/join`,
       humanText: newMessage,
       userId: null,
-      actionId: null,
     });
     return true;
   }
@@ -37,13 +36,10 @@ export default async function processChatMessages(
     user,
   });
 
-  console.log({ actionAnalysis });
-
   const messageBody = {
     to: userNumber,
     humanText: newMessage,
     userId: user.id,
-    actionId: null,
   };
 
   if (!actionAnalysis) {
@@ -60,6 +56,7 @@ export default async function processChatMessages(
         user,
         messageData: messageBody,
         action: actionAnalysis.action,
+        actionFlowId: actionAnalysis.actionFlowId,
         args: actionAnalysis.args,
       });
       break;
@@ -69,7 +66,12 @@ export default async function processChatMessages(
       break;
 
     case FETCH_REMINDERS:
-      await processReminderFlow({ userId: user.id, args: actionAnalysis.args });
+      await processReminderFlow({
+        user,
+        args: actionAnalysis.args,
+        action: actionAnalysis.action,
+        actionFlowId: actionAnalysis.actionFlowId,
+      });
       break;
 
     default:

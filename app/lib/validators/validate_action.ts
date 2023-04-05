@@ -8,8 +8,14 @@ import {
 } from '~/config/actions';
 import { convertNaturalDateToISO } from '~/models/processing/formatting.server';
 import constructNextActionStepMessage from '../helpers/construct_next_action_step_message';
+import { updateActionFlow } from '~/models/memory/action.server';
+import type { User } from '@prisma/client';
 
-export default async function validateAction(response: string) {
+export default async function validateAction(
+  response: string,
+  actionFlowId: number | undefined,
+  user: User
+) {
   // terminate early if gpt can't map the response to an action
   const sanitisedResponse = response.split('Assistant: ')[1] || CHAT_ACTION;
   if (sanitisedResponse === CHAT_ACTION) {
@@ -58,7 +64,6 @@ export default async function validateAction(response: string) {
     // as gpt isn't able to do this by itself
     if (key === 'date' && argValue) {
       const possibleDate = await convertNaturalDateToISO(argValue);
-      console.log('possibleDate', possibleDate);
       const isValidDate = possibleDate;
 
       if (isValidDate) {
@@ -80,7 +85,6 @@ export default async function validateAction(response: string) {
   );
 
   if (allInvalidArgs.length) {
-    console.log('allInvalidArgs', allInvalidArgs);
     return {
       action: REFINE_ACTION,
       args: processedArgs,
@@ -92,5 +96,15 @@ export default async function validateAction(response: string) {
     };
   }
 
-  return { action, args: processedArgs };
+  if (!actionFlowId) {
+    const actionFlow = await updateActionFlow({
+      user,
+      action: {
+        name: action,
+      },
+    });
+    actionFlowId = actionFlow.id;
+  }
+
+  return { action, args: processedArgs, actionFlowId };
 }

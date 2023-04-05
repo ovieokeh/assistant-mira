@@ -29,13 +29,10 @@ export async function processChatFlow({
     invariant(false, 'No chat response from GPT-3');
   }
 
-  console.log('Mira:', chatGPTResponse);
-
   await sendWhatsappMessage({
     to: userNumber,
     humanText: messages[0].text.body,
     text: chatGPTResponse,
     userId: user.id,
-    actionId: null,
   });
 }

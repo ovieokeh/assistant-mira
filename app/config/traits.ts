@@ -1,3 +1,6 @@
 export const DEFAULT_PERSONALITY_TRAITS = [
-  'kind, emotionally stable, reserved, humorous, witty, calm',
+  'kind',
+  'detailed',
+  'emotionally stable',
+  'witty',
 ];

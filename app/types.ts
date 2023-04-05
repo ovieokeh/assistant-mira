@@ -69,9 +69,9 @@ export type RawWhatsappWebhookEntry = {
 export type WhatsappMessage = {
   to: string;
   text: string;
-  humanText: string;
+  humanText?: string;
   userId: number | null;
-  actionId: number | null;
+  actionId?: number;
 };
 
 export type ChatActionArgs = Record<

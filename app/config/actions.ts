@@ -19,11 +19,6 @@ export const POSSIBLE_ACTIONS = [
   REFINE_ACTION,
 ] as const;
 
-export const MESSAGING_STATES = {
-  CHAT: 'CHAT',
-  ACTION: 'ACTION',
-};
-
 export const ACTION_REQUIRED_ARGS: {
   [key: string]: string[] | undefined;
 } = {

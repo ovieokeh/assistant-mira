@@ -1,6 +1,7 @@
 import type { LoaderArgs } from '@remix-run/server-runtime';
 import { json } from '@remix-run/server-runtime';
 import { saveUserGoogleOAuthTokens } from '~/models/memory/user.server';
+import { saveGoogleOAuthTokens } from '~/services/google.server';
 import { getUserId, requireUserId } from '~/services/session.server';
 
 export async function loader({ request }: LoaderArgs) {
@@ -27,6 +28,8 @@ export async function loader({ request }: LoaderArgs) {
         authCode: code,
       },
     });
+
+    await saveGoogleOAuthTokens({ userId });
 
     return json({ ok: true });
   } catch (error) {

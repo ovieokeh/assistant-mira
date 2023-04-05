@@ -16,8 +16,6 @@ export const createUser = async ({
 }) => {
   const hashedPassword = await hash(password, 10);
 
-  console.log('creating user', name, phone, hashedPassword, profile);
-
   const user = await prisma.user.create({
     data: {
       name,
@@ -131,11 +129,23 @@ export const saveUserGoogleOAuthTokens = async ({
     refreshToken?: string;
   };
 }) => {
-  const data = await prisma.userToGoogleOAuthCode.update({
+  const data = await prisma.userToGoogleOAuthCode.upsert({
     where: {
       userId,
     },
-    data: { ...tokens },
+    create: {
+      user: {
+        connect: {
+          id: userId,
+        },
+      },
+      authCode: tokens.authCode || '',
+      token: '',
+      refreshToken: '',
+    },
+    update: {
+      ...tokens,
+    },
   });
 
   return data;

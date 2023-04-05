@@ -1,7 +1,11 @@
+import { User } from '@prisma/client';
 import type { OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
+import sendWhatsappMessage from '~/lib/helpers/send_whatsapp_message';
 import { saveUserGoogleOAuthTokens } from '~/models/memory/user.server';
 import { prisma } from './db.server';
+
+export const GOOGLE_TOKEN_ERROR = 'GOOGLE_TOKEN_ERROR';
 
 // If modifying these scopes, delete token.json.
 const SCOPES = ['https://www.googleapis.com/auth/calendar.readonly'];
@@ -42,7 +46,7 @@ export async function saveGoogleOAuthTokens({
 
   const { tokens } = await newClient.getToken(savedTokens?.authCode as string);
   if (!tokens || !tokens.access_token || !tokens.refresh_token) {
-    throw new Error('no tokens');
+    throw new Error(GOOGLE_TOKEN_ERROR);
   }
 
   await saveUserGoogleOAuthTokens({
@@ -66,19 +70,26 @@ function getOAuthClient() {
   return newClient;
 }
 
-export async function getCalendarClient({ userId }: { userId: number }) {
-  console.info('🔌 setting up google apis client');
+export async function getCalendarClient({ user }: { user: User }) {
+  console.info('🔌 setting up google apis client', user.id);
   const clientAuth = getOAuthClient();
 
   const savedTokens = await prisma.userToGoogleOAuthCode.findUnique({
     where: {
-      userId,
+      userId: user.id,
     },
   });
 
   if (!savedTokens?.token || !savedTokens?.refreshToken) {
     const authorisationUrl = await getAuthorisationUrl({ client: clientAuth });
-    throw new Error(authorisationUrl);
+
+    await sendWhatsappMessage({
+      userId: user.id,
+      to: user.phone,
+      text: `Please authorise me to access your Google Calendar by clicking on this link: ${authorisationUrl}`,
+    });
+
+    throw new Error(GOOGLE_TOKEN_ERROR);
   }
 
   clientAuth.setCredentials({

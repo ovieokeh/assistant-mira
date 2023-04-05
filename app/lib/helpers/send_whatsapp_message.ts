@@ -1,8 +1,8 @@
 import type { WhatsappMessage } from '~/types';
+import { Role } from '@prisma/client';
 import axios from 'axios';
 
 import { saveConversation } from '~/models/memory/conversation.server';
-import { Role } from '@prisma/client';
 
 export default async function sendWhatsappMessage(message: WhatsappMessage) {
   const url = 'https://graph.facebook.com/v16.0/127038643650780/messages';
@@ -25,20 +25,23 @@ export default async function sendWhatsappMessage(message: WhatsappMessage) {
     console.error('send message error', error.response.data);
   });
 
-  const conversationToSave = [
-    {
+  const conversationToSave = [];
+  if (message.humanText) {
+    conversationToSave.push({
       userId: message.userId,
-      content: message.humanText,
       role: Role.user,
-      actionId: message.actionId,
-    },
-    {
+      content: message.humanText,
+      actionId: message.actionId || null,
+    });
+  }
+  if (message.text) {
+    conversationToSave.push({
       userId: message.userId,
-      content: message.text,
       role: Role.assistant,
-      actionId: message.actionId,
-    },
-  ];
+      content: message.text,
+      actionId: message.actionId || null,
+    });
+  }
 
   return await saveConversation(conversationToSave);
 }

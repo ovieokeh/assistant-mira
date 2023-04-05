@@ -16,17 +16,15 @@ export async function analysePossibleActions({
   user: User;
 }) {
   try {
-    if (user.currentState === MessagingState.ACTION) {
-      const currentActionFlow = await getCurrentActionFlow(user);
-
-      console.log('Current action flow:', currentActionFlow);
+    let currentActionFlow = await getCurrentActionFlow(user);
+    if (user.currentState === MessagingState.ACTION && currentActionFlow) {
+      // console.log('Current action flow:', currentActionFlow);
       // if the user is in the middle of an action flow and sends a message
       // we need to validate the message and return the next step in the flow
       // const { action, args } = await actionArgsFlow({
       //   message,
       //   user,
       // });
-
       // return { action, args };
     }
 
@@ -43,10 +41,8 @@ export async function analysePossibleActions({
       invariant(false, 'No response from GPT-3');
     }
 
-    console.log({ response });
-
     // validate if action is possible
-    return await validateAction(response);
+    return await validateAction(response, currentActionFlow?.id, user);
   } catch (error) {
     console.error(error);
   }
