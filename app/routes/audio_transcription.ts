@@ -45,12 +45,14 @@ export async function action({ request }: ActionArgs) {
 
       if (transcription) {
         const user = await getUserProfile({ phone: jobInDb.user });
+
+        if (!user) continue;
+
         const message = {
           to: jobInDb.user,
           humanText: 'You sent an audio file.',
           text: `Here's your transcription: \n\n${transcription}\n\n`,
           userId: user.id,
-          actionId: null,
         };
 
         await sendWhatsappMessage(message);

@@ -12,7 +12,7 @@ export default async function prepareChatContext({
   newMessages: UnformattedMessage[];
 }) {
   const profileData = user.profile?.data || 'No profile data';
-  const messageHistory = await getUserMessages(user.id);
+  const messageHistory = await getUserMessages({ userId: user.id });
   const chatContext: Pick<Message, 'role' | 'content'>[] = [
     {
       role: Role.system,

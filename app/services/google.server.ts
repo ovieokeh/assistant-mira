@@ -1,4 +1,4 @@
-import { User } from '@prisma/client';
+import type { User } from '@prisma/client';
 import type { OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
 import sendWhatsappMessage from '~/lib/helpers/send_whatsapp_message';
