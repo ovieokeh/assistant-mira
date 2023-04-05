@@ -16,7 +16,11 @@ export default async function prepareChatContext({
   const chatContext: Pick<Message, 'role' | 'content'>[] = [
     {
       role: Role.system,
-      content: `${CHAT_PRIMER}\n This is the info of the person you're chatting with: ${profileData}`,
+      content: `
+      ${CHAT_PRIMER}
+      This is the info of the person you're chatting with:
+      name: ${user.name}
+      bio: ${profileData}`,
     },
   ];
   chatContext.push(...messageHistory);

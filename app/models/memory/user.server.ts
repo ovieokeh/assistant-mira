@@ -86,13 +86,14 @@ export const getUserProfile = async ({
 };
 
 export const getUserMessages = async ({ userId }: { userId: User['id'] }) => {
+  console.log('getUserMessages', userId);
   if (!userId) {
     return [];
   }
 
   const messages = await prisma.message.findMany({
     where: {
-      id: userId,
+      userId: userId,
     },
   });
 
