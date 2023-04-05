@@ -1,0 +1,96 @@
+:root {
+  touch-action: pan-x pan-y;
+  height: 100% 
+}
+
+html {
+  --color-brand: #154273;
+  --color-brand-light: #e2f5ff;
+  --color-secondary: #01689b;
+  --color-black: #000;
+  --color-white: #ffffff;
+  --box-shadow: #0a192f;
+  --color-background: #ffffff;
+  --color-text-primary: #0a192f;
+  --color-text-success: #209651;
+
+  --space-4: 4px;
+  --space-8: calc(var(--space-4) * 2);
+  --space-12: calc(var(--space-4) * 3);
+  --space-16: calc(var(--space-4) * 4);
+  --space-20: calc(var(--space-4) * 5);
+  --space-24: calc(var(--space-4) * 6);
+  --space-28: calc(var(--space-4) * 7);
+  --space-32: calc(var(--space-4) * 8);
+  --space-36: calc(var(--space-4) * 9);
+  --space-40: calc(var(--space-4) * 10);
+  --space-44: calc(var(--space-4) * 11);
+  --space-48: calc(var(--space-4) * 12);
+  --space-52: calc(var(--space-4) * 13);
+  --space-56: calc(var(--space-4) * 14);
+
+  --bp-mobile: 480px;
+  --bp-tablet: 768px;
+  --bp-desktop: 1368px;
+
+  --border-radius-4: 4px;
+  --border-radius-8: 8px;
+  --border-radius-12: 12px;
+
+  --transition-ease-cubic: cubic-bezier(0.76, 0, 0.24, 1);
+
+  --z-index-bg: -1;
+  --z-index-base: 1;
+  --z-index-filters: 2;
+  --z-index-nav: 3;
+  --z-index-nav-menu: 4;
+
+  ---nav-height: 84px;
+  --site-width: 1080px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  font-family: 'Nunito', sans-serif;
+}
+
+@media screen and (min-width: 768px) {
+  html, body {
+    overflow-x: initial;
+  }
+}
+
+h1 {
+  --minFontSize: 32px;
+  --maxFontSize: 40px;
+  --scaler: 10vw;
+  font-family: 'Montserrat', serif;
+  font-size: clamp( var(--minFontSize), var(--scaler), var(--maxFontSize));
+  color: var(--color-brand);
+}
+
+h2 {
+  --minFontSize: 26px;
+  --maxFontSize: 32px;
+  --scaler: 5vw;
+  font-size: clamp( var(--minFontSize), var(--scaler), var(--maxFontSize));
+  color: var(--color-brand);
+}
+
+p {
+  --minFontSize: 12px;
+  --maxFontSize: 18px;
+  --scaler: 5vw;
+  font-size: clamp( var(--minFontSize), var(--scaler), var(--maxFontSize));
+}
+
+h1, h2 {
+  margin-bottom: 0;
+}
+
+.no-scroll {
+  overflow: hidden;
+}

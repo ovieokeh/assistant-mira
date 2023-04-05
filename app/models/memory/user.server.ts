@@ -55,6 +55,7 @@ export async function verifyLogin({
   }
 
   const isValid = await compare(password, userWithPassword.password.hash);
+  console.log('isValid', isValid, password, userWithPassword.password.hash);
 
   if (!isValid) {
     return null;
@@ -86,7 +87,6 @@ export const getUserProfile = async ({
 };
 
 export const getUserMessages = async ({ userId }: { userId: User['id'] }) => {
-  console.log('getUserMessages', userId);
   if (!userId) {
     return [];
   }

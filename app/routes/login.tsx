@@ -1,15 +1,19 @@
 import type { ActionArgs, LoaderArgs, V2_MetaFunction } from '@remix-run/node';
 import { json, redirect } from '@remix-run/node';
 import { Form, Link, useActionData, useSearchParams } from '@remix-run/react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import PhoneInput from 'react-phone-number-input';
 
 import { verifyLogin } from '~/models/memory/user.server';
-import { createUserSession, getUserId } from '~/services/session.server';
+import {
+  createUserSession,
+  getUserIdFromSession,
+} from '~/services/session.server';
 
 import { safeRedirect, validatePhone } from '~/utils';
 
 export const loader = async ({ request }: LoaderArgs) => {
-  const userId = await getUserId(request);
+  const userId = await getUserIdFromSession(request);
   if (userId) return redirect('/dashboard');
   return json({});
 };
@@ -21,9 +25,15 @@ type FormValidationErrors = {
 
 export const action = async ({ request }: ActionArgs) => {
   const formData = await request.formData();
-  const phone = formData.get('phone') as string;
+  let phone = formData.get('phone') as string;
+  // remove all spaces and + from phone number
+  phone = phone.replace(/[^0-9]/g, '');
+
   const password = formData.get('password') as string;
-  const redirectTo = safeRedirect(formData.get('redirectTo'), '/dashboard');
+  const redirectTo = safeRedirect(
+    formData.get('redirectTo'),
+    request.headers.get('Referer') || '/dashboard'
+  );
   const remember = formData.get('remember');
 
   const errors: FormValidationErrors = {};
@@ -44,10 +54,15 @@ export const action = async ({ request }: ActionArgs) => {
     return json({ errors }, { status: 400 });
   }
 
+  console.log('phone', phone, 'password', password);
+
   const user = await verifyLogin({ phone, password });
 
   if (!user) {
-    return json({ errors: { phone: 'Invalid phone' } }, { status: 400 });
+    return json(
+      { errors: { phone: 'Invalid login details' } },
+      { status: 400 }
+    );
   }
 
   return createUserSession({
@@ -55,7 +70,6 @@ export const action = async ({ request }: ActionArgs) => {
     remember: remember === 'on' ? true : false,
     request,
     userId: user.id,
-    userPhone: phone,
   });
 };
 
@@ -65,8 +79,9 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get('redirectTo') || '/dashboard';
   const actionData = useActionData<{ errors: FormValidationErrors }>();
-  const phoneRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<any>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const [phoneNumber, setPhoneNumber] = useState();
 
   useEffect(() => {
     if (actionData?.errors?.phone) {
@@ -79,8 +94,11 @@ export default function LoginPage() {
   }, [actionData]);
 
   return (
-    <div className="flex min-h-full flex-col justify-center">
-      <div className="mx-auto w-full max-w-md px-8">
+    <div className="flex  min-h-full flex-col justify-center">
+      <div className="mx-auto w-full max-w-md rounded bg-slate-50 p-8">
+        <h1 className="mb-4 text-center text-2xl font-bold">
+          Log in to your account
+        </h1>
         <Form method="post" className="space-y-6">
           <div>
             <label
@@ -90,14 +108,17 @@ export default function LoginPage() {
               Phone
             </label>
             <div className="mt-1">
-              <input
+              <PhoneInput
                 ref={phoneRef}
                 id="phone"
                 required
                 autoFocus={true}
+                value={phoneNumber}
+                onChange={setPhoneNumber as any}
                 name="phone"
                 type="phone"
                 autoComplete="phone"
+                placeholder="Enter phone number"
                 aria-invalid={actionData?.errors?.phone ? true : undefined}
                 aria-describedby="phone-error"
                 className="w-full rounded border border-gray-500 px-2 py-1 text-lg"
@@ -123,7 +144,8 @@ export default function LoginPage() {
                 ref={passwordRef}
                 name="password"
                 type="password"
-                autoComplete="new-password"
+                autoComplete="password"
+                placeholder="Enter password"
                 aria-invalid={actionData?.errors?.password ? true : undefined}
                 aria-describedby="password-error"
                 className="w-full rounded border border-gray-500 px-2 py-1 text-lg"

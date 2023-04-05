@@ -2,18 +2,13 @@ import type { Message, User } from '@prisma/client';
 import type { LoaderArgs } from '@remix-run/node';
 import { json } from '@remix-run/node';
 import { Form, Link, Outlet, useLoaderData } from '@remix-run/react';
-import invariant from 'tiny-invariant';
-import { getUserMessages, getUserProfile } from '~/models/memory/user.server';
-import { requireUserId } from '~/services/session.server';
+
+import { getUserMessages } from '~/models/memory/user.server';
+import { requireUser } from '~/services/session.server';
 
 export const loader = async ({ request }: LoaderArgs) => {
-  const userId = await requireUserId(request);
-
-  if (!userId) {
-    return invariant(false, 'User is not logged in');
-  }
-  const user = await getUserProfile({ id: userId });
-  const messages = await getUserMessages({ userId });
+  const user = await requireUser(request);
+  const messages = await getUserMessages({ userId: user.id });
   return json({ user, messages });
 };
 
@@ -24,8 +19,8 @@ export default function Messages() {
 
   return (
     <div className="flex h-full min-h-screen flex-col">
-      <header className="flex items-center justify-between bg-slate-800 p-4 text-white">
-        <h1 className="text-3xl font-bold">
+      <header className="flex items-center justify-between bg-slate-400 p-4 text-white">
+        <h1 className="text-xl font-bold">
           <Link to=".">Your messages</Link>
         </h1>
         <p>{data.user.email}</p>

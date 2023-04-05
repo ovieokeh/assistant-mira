@@ -1,15 +1,20 @@
 import type { ActionArgs, LoaderArgs, V2_MetaFunction } from '@remix-run/node';
 import { json, redirect } from '@remix-run/node';
 import { Form, Link, useActionData, useSearchParams } from '@remix-run/react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import PhoneInput from 'react-phone-number-input';
+
 import { createUser, getUserProfile } from '~/models/memory/user.server';
-import { createUserSession, getUserId } from '~/services/session.server';
+import {
+  createUserSession,
+  getUserIdFromSession,
+} from '~/services/session.server';
 
 import { safeRedirect, validatePhone } from '~/utils';
 
 export const loader = async ({ request }: LoaderArgs) => {
-  const userId = await getUserId(request);
-  if (userId) return redirect('/');
+  const userId = await getUserIdFromSession(request);
+  if (userId) return redirect('/dashboard');
   return json({});
 };
 
@@ -24,9 +29,13 @@ export const action = async ({ request }: ActionArgs) => {
   const formData = await request.formData();
   const name = formData.get('name') as string;
   const bio = formData.get('bio') as string;
-  const phone = formData.get('phone') as string;
   const password = formData.get('password') as string;
-  const redirectTo = safeRedirect(formData.get('redirectTo'), '/dashboard');
+  let phone = formData.get('phone') as string;
+  phone = phone.replace(/\s/g, '');
+  const redirectTo = safeRedirect(
+    formData.get('redirectTo'),
+    request.headers.get('Referer') || '/dashboard'
+  );
 
   const errors: FormValidationErrors = {};
 
@@ -34,8 +43,8 @@ export const action = async ({ request }: ActionArgs) => {
     errors.name = 'Name is required';
   }
 
-  if (typeof bio === 'string' && bio.length > 0 && bio.length < 140) {
-    errors.bio = 'A longer bio is required';
+  if (typeof bio === 'string' && bio.length > 0 && bio.length < 40) {
+    errors.bio = 'A bio of at least 40 characters is required';
   }
 
   if (!validatePhone(phone)) {
@@ -79,7 +88,6 @@ export const action = async ({ request }: ActionArgs) => {
     remember: false,
     request,
     userId: user.id,
-    userPhone: phone,
   });
 };
 
@@ -90,9 +98,10 @@ export default function Join() {
   const redirectTo = searchParams.get('redirectTo') ?? undefined;
   const actionData = useActionData<{ errors: FormValidationErrors }>();
   const nameRef = useRef<HTMLInputElement>(null);
-  const phoneRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<any>(null);
   const bioRef = useRef<HTMLTextAreaElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const [phoneNumber, setPhoneNumber] = useState();
 
   useEffect(() => {
     if (actionData?.errors?.phone) {
@@ -108,7 +117,11 @@ export default function Join() {
 
   return (
     <div className="flex min-h-full flex-col justify-center">
-      <div className="mx-auto w-full max-w-md px-8">
+      <div className="mx-auto w-full max-w-md rounded bg-slate-50 p-8">
+        <h1 className="mb-4 text-center text-2xl font-bold">
+          Create a new account to start using Mira
+        </h1>
+
         <Form method="post" className="space-y-6">
           <div>
             <label
@@ -126,9 +139,10 @@ export default function Join() {
                 name="name"
                 type="text"
                 autoComplete="name"
+                placeholder='e.g. "John"'
                 aria-invalid={actionData?.errors?.name ? true : undefined}
                 aria-describedby="name-error"
-                className="w-full rounded border border-gray-500 px-2 py-1 text-lg"
+                className="w-full rounded border border-slate-500 px-2 py-1 text-lg"
               />
               {actionData?.errors?.name && (
                 <div className="pt-1 text-red-700" id="phone-error">
@@ -146,13 +160,16 @@ export default function Join() {
               Phone
             </label>
             <div className="mt-1">
-              <input
+              <PhoneInput
                 ref={phoneRef}
                 id="phone"
                 required
+                value={phoneNumber}
+                onChange={setPhoneNumber as any}
                 name="phone"
                 type="phone"
                 autoComplete="phone"
+                placeholder='e.g. "+1 555 555 5555"'
                 aria-invalid={actionData?.errors?.phone ? true : undefined}
                 aria-describedby="phone-error"
                 className="w-full rounded border border-gray-500 px-2 py-1 text-lg"
@@ -180,8 +197,9 @@ export default function Join() {
                 name="bio"
                 autoComplete="bio"
                 aria-invalid={actionData?.errors?.bio ? true : undefined}
+                placeholder="e.g. I'm a student at the University of Washington. I love to cook and I'm interested in detective novels and collecting coins"
                 aria-describedby="bio-error"
-                className="w-full rounded border border-gray-500 px-2 py-1 text-lg"
+                className="h-[250px] w-full rounded border border-gray-500 px-2 py-1 text-lg"
               />
               {actionData?.errors?.bio && (
                 <div className="pt-1 text-red-700" id="bio-error">
@@ -204,6 +222,7 @@ export default function Join() {
                 ref={passwordRef}
                 name="password"
                 type="password"
+                placeholder="At least 8 characters"
                 autoComplete="new-password"
                 aria-invalid={actionData?.errors?.password ? true : undefined}
                 aria-describedby="password-error"

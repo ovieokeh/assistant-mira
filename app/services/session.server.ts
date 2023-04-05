@@ -18,75 +18,51 @@ export const sessionStorage = createCookieSessionStorage({
 });
 
 const USER_SESSION_ID_KEY = 'userId';
-const USER_SESSION_PHONE_KEY = 'userPhone';
 
 export async function getSession(request: Request) {
   const cookie = request.headers.get('Cookie');
   return sessionStorage.getSession(cookie);
 }
 
-export async function getUserId(
-  request: Request
-): Promise<User['id'] | undefined> {
+export async function getUserIdFromSession(request: Request) {
   const session = await getSession(request);
   const userId = session.get(USER_SESSION_ID_KEY);
   return userId;
 }
 
-export async function getUserPhone(
-  request: Request
-): Promise<User['phone'] | undefined> {
-  const session = await getSession(request);
-  const userPhone = session.get(USER_SESSION_PHONE_KEY);
-  return userPhone;
+export async function getUser(request: Request): Promise<User | null> {
+  const userId = await getUserIdFromSession(request);
+
+  const userData = await getUserProfile({ id: userId });
+  return userData;
 }
 
-export async function getUser(request: Request) {
-  const id = await getUserId(request);
-  const phone = await getUserPhone(request);
-  if (!phone) return null;
-
-  const user = await getUserProfile({ id, phone });
-  if (user) return user;
-
-  throw await logout(request);
-}
-
-export async function requireUserId(
+export async function requireUser(
   request: Request,
   redirectTo: string = new URL(request.url).pathname
 ) {
-  const userId = await getUserId(request);
-  if (!userId) {
-    const searchParams = new URLSearchParams([['redirectTo', redirectTo]]);
-    throw redirect(`/login?${searchParams}`);
-  }
-  return userId;
-}
-
-export async function requireUser(request: Request) {
   const user = await getUser(request);
   if (user) return user;
 
-  throw await logout(request);
+  await logout(request);
+  const searchParams = new URLSearchParams([['redirectTo', redirectTo]]);
+  throw redirect(`/login?${searchParams}`);
 }
 
 export async function createUserSession({
   request,
   userId,
-  userPhone,
   remember,
   redirectTo,
 }: {
   request: Request;
   userId: number;
-  userPhone: string;
   remember: boolean;
   redirectTo: string;
 }) {
   const session = await getSession(request);
   session.set(USER_SESSION_ID_KEY, userId);
-  session.set(USER_SESSION_PHONE_KEY, userPhone);
+
   return redirect(redirectTo, {
     headers: {
       'Set-Cookie': await sessionStorage.commitSession(session, {
