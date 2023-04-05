@@ -1,4 +1,5 @@
 import type { LoaderArgs } from '@remix-run/server-runtime';
+import { redirect } from '@remix-run/server-runtime';
 import { json } from '@remix-run/server-runtime';
 import { saveUserGoogleOAuthTokens } from '~/models/memory/user.server';
 import { saveGoogleOAuthTokens } from '~/services/google.server';
@@ -31,7 +32,7 @@ export async function loader({ request }: LoaderArgs) {
 
     await saveGoogleOAuthTokens({ userId });
 
-    return json({ ok: true });
+    return redirect('/dashboard');
   } catch (error) {
     console.error(error);
     return json({ error: 'server error' }, { status: 500 });
