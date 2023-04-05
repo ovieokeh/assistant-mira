@@ -7,7 +7,7 @@ import { getUserMessages } from '~/models/memory/user.server';
 import { requireUser } from '~/services/session.server';
 
 export const loader = async ({ request }: LoaderArgs) => {
-  const user = await requireUser(request);
+  const user = (await requireUser(request)) as User;
   const messages = await getUserMessages({ userId: user.id });
   return json({ user, messages });
 };

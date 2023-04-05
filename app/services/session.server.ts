@@ -46,7 +46,7 @@ export async function requireUser(
 
   await logout(request);
   const searchParams = new URLSearchParams([['redirectTo', redirectTo]]);
-  throw redirect(`/login?${searchParams}`);
+  return redirect(`/login?${searchParams}`);
 }
 
 export async function createUserSession({

@@ -1,3 +1,4 @@
+import { User } from '@prisma/client';
 import type { LoaderArgs } from '@remix-run/server-runtime';
 import { redirect } from '@remix-run/server-runtime';
 import { json } from '@remix-run/server-runtime';
@@ -15,7 +16,7 @@ export async function loader({ request }: LoaderArgs) {
       return json({ error: 'no code' }, { status: 400 });
     }
 
-    const user = await requireUser(request);
+    const user = (await requireUser(request, request.url)) as User;
 
     //update user with google oauth code
     await saveUserGoogleOAuthTokens({
