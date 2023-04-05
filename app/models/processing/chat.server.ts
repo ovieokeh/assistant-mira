@@ -4,7 +4,7 @@ import invariant from 'tiny-invariant';
 
 import { ACTION_PRIMER } from '~/config/prompts';
 
-import { gpt } from '~/gpt.server';
+import { gpt } from '~/services/gpt.server';
 import validateAction from '~/lib/validators/validate_action';
 import { getCurrentActionFlow } from '../memory/action.server';
 

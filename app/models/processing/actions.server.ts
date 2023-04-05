@@ -2,7 +2,7 @@ import { createReadStream, createWriteStream } from 'fs';
 import https from 'https';
 
 import { TRANSCRIPTION_PROMPT } from '~/config/prompts';
-import { gpt } from '~/gpt.server';
+import { gpt } from '~/services/gpt.server';
 import exec from '~/lib/helpers/exec';
 
 const generateRandomId = () => Math.random().toString(36).substring(2, 15);

@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function seed() {
   const defaultUser: Omit<User, 'id' | 'createdAt' | 'updatedAt'> = {
     name: 'Ovie',
-    phone: '31643141919',
+    phone: '3112345431',
     email: 'nerdylonglegs@gmail.com',
     currentState: MessagingState.CHAT,
   };

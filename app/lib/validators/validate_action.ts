@@ -27,20 +27,21 @@ export default async function validateAction(response: string) {
 
   const REQUIRED_ARGS = ACTION_REQUIRED_ARGS[action];
   // convert the args to the ChatActionArgs type
-  let processedArgs = possibleArgs
-    ?.split('&')
-    .map((arg) => arg.split('='))
-    .reduce((acc, [key, value]) => {
-      const argBody = {
-        id: key,
-        value,
-        isValid: false,
-        isRequired: REQUIRED_ARGS?.length && REQUIRED_ARGS.includes(key),
-      };
+  let processedArgs =
+    possibleArgs
+      ?.split('&')
+      .map((arg) => arg.split('='))
+      .reduce((acc, [key, value]) => {
+        const argBody = {
+          id: key,
+          value,
+          isValid: false,
+          isRequired: REQUIRED_ARGS?.length && REQUIRED_ARGS.includes(key),
+        };
 
-      acc[key] = argBody;
-      return acc;
-    }, {} as ChatActionArgs);
+        acc[key] = argBody;
+        return acc;
+      }, {} as ChatActionArgs) || {};
 
   const processedArgKeys = Object.keys(processedArgs);
   // Check if there are any required args to be validated

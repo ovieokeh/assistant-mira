@@ -2,7 +2,7 @@ import type { User } from '@prisma/client';
 import type { ChatActionArgs } from '~/types';
 import { MessagingState } from '@prisma/client';
 
-import { prisma } from '~/db.server';
+import { prisma } from '~/services/db.server';
 import constructNextActionStepMessage from '~/lib/helpers/construct_next_action_step_message';
 import sendWhatsappMessage from '~/lib/helpers/send_whatsapp_message';
 import { setUserMessagingState } from '~/models/memory/user.server';

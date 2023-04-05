@@ -1,7 +1,7 @@
 import type { User } from '@prisma/client';
 import { ActionStatus } from '@prisma/client';
 
-import { prisma } from '~/db.server';
+import { prisma } from '~/services/db.server';
 
 export const getCurrentActionFlow = async (user: User) => {
   const actionFlow = await prisma.action.findFirst({

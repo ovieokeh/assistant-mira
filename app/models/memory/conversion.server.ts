@@ -1,5 +1,5 @@
 import type { ConversionJob } from '@prisma/client';
-import { prisma } from '~/db.server';
+import { prisma } from '~/services/db.server';
 
 export const getConversionJob = async (id: string) => {
   const jobInDb = await prisma.conversionJob.findUnique({

@@ -26,6 +26,14 @@ export function safeRedirect(
   return to;
 }
 
+export function validatePhone(phone: string) {
+  // comprehensive regex to validate all phone numbers
+  // https://stackoverflow.com/a/16699507/1123955
+  const regex =
+    /^\+?([0-9]{1,4})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{3})[-. ]?([0-9]{4})$/;
+  return regex.test(phone);
+}
+
 /**
  * This base hook is used in other hooks to quickly search for specific data
  * across all loader data using useMatches.

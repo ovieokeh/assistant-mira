@@ -70,7 +70,7 @@ export type WhatsappMessage = {
   to: string;
   text: string;
   humanText: string;
-  userId: number;
+  userId: number | null;
   actionId: number | null;
 };
 

@@ -27,7 +27,7 @@ function getGPT() {
     'OPENAI_API_KEY env var not set'
   );
 
-  console.info('🔌 setting up opnai gpt client');
+  console.info('🔌 setting up openai gpt client');
   const configuration = new Configuration({
     apiKey: process.env.OPENAI_API_KEY,
   });

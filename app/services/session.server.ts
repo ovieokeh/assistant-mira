@@ -2,7 +2,7 @@ import type { User } from '@prisma/client';
 import { createCookieSessionStorage, redirect } from '@remix-run/node';
 import invariant from 'tiny-invariant';
 
-import { getUserProfile } from './models/memory/user.server';
+import { getUserProfile } from '../models/memory/user.server';
 
 invariant(process.env.SESSION_SECRET, 'SESSION_SECRET must be set');
 
@@ -79,7 +79,7 @@ export async function createUserSession({
   redirectTo,
 }: {
   request: Request;
-  userId: string;
+  userId: number;
   userPhone: string;
   remember: boolean;
   redirectTo: string;

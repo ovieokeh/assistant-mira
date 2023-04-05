@@ -1,7 +1,7 @@
 import invariant from 'tiny-invariant';
 
 import { NATURAL_LANGUAGE_TO_DATE_PROMPTER } from '~/config/prompts';
-import { gpt } from '~/gpt.server';
+import { gpt } from '~/services/gpt.server';
 
 export async function convertNaturalDateToISO(date: string) {
   const { data } = await gpt.createChatCompletion({
