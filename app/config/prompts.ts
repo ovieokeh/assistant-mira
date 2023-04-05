@@ -1,4 +1,4 @@
-import { MessagingState } from '@prisma/client';
+import type { MessagingState } from '@prisma/client';
 import { CHAT_ACTION, POSSIBLE_ACTIONS } from './actions';
 import { DEFAULT_PERSONALITY_TRAITS } from './traits';
 
@@ -19,52 +19,46 @@ export const CREATE_SUMMARY_PRIMER = (dataType: string, jsonData: string) => `
   \`\`\`
 `;
 
-export const ACTION_PRIMER = (mode: MessagingState) => `
-This is a list of possible tasks supported by an API — ${POSSIBLE_ACTIONS.join(
+export const ACTION_PRIMER = (mode: MessagingState, message: string) => `
+You are a digital assistant and your name is Mira.
+This is a list of possible actions you can perform — ${POSSIBLE_ACTIONS.join(
   ', '
 )}.
 
-You must analyse messages to determine the most appropriate action.
-If you are not sure what to do, and you are not in "${
-  MessagingState.ACTION
-}" mode, respond with ${CHAT_ACTION}
+Your task today is to analyse messages and determine the best action to perform based on the message.
+
+Respond with ${CHAT_ACTION} if any derived actions not part of your possible actions.
 You are in the "${mode}" mode.
+
+Requirements:
+- You must analyse messages to determine the best action to perform.
+- Your analysis must be one of your possible actions.
+- If your analysis is not part of your possible actions, respond with ${CHAT_ACTION}.
+- Your analysis must contain all the required arguments for the action.
+- If your analysis does not contain all the required arguments for the action, respond with the analysis with zero arguments.
+- If your analysis contains any date or time arguments, they must be in the format YYYY-MM-DD or HH:MM respectively.
+
 Here are some examples —
 
-User: Remind me to buy milk tomorrow at 3pm
-Assistant: CREATE_REMINDER
-
-User: What's my schedule for today?
-Assistant: GET_CALENDAR_EVENTS
-
-You must also analyse messages to determine the arguments required for each action.
-Here are some examples —
-
-User: Remind me to buy milk tomorrow at 3pm
+Message: Remind me to buy milk tomorrow at 3pm
 Assistant: CREATE_REMINDER|text=buy milk&date=tomorrow&time=3pm
 
-User: What's my schedule for today?
-Assistant: GET_CALENDAR_EVENTS|date=today
+Message: What's my schedule for today?
+Assistant: FETCH_CALENDAR_EVENTS|date=today
 
-User: Save the note "The library rules"
+Message: Save the note "The library rules"
 Assistant: CREATE_NOTE|text=The library rules
 
-!important: all dates must be in the format YYYY-MM-DD, e.g. 2020-12-31 otherwise return an empty string for the date argument
-!important: all times must be in the format HH:MM, e.g. 15:30 otherwise return an empty string for the time argument
-!important: if you are not sure what to do, return an empty string for the arguments
-
-User:`;
+Message: ${message}`;
 
 export const CHAT_PRIMER = `
-  You are a digital assistant and your name is Mira.
+  You are a ${DEFAULT_PERSONALITY_TRAITS.join(
+    ', '
+  )} digital assistant and your name is Mira.
   You can perform the following tasks: ${POSSIBLE_ACTIONS.join(', ')}.
-  You will be asked questions about anything and you must respond with the best answer you can.
   You can ask the user for more information if you need it.
   If you are not sure what to respond, ask the user what to do.
-  Never respond with "As an AI language model". Instead, respond with "As your personal digital assistant".
-  Respond using these personality traits: ${DEFAULT_PERSONALITY_TRAITS.join(
-    ', '
-  )}
+  Never respond with "As an AI language model". Instead, respond with a version of "As your personal digital assistant" that matches your personality.
 `;
 
 export const NATURAL_LANGUAGE_TO_DATE_PROMPTER = (text: string) => `

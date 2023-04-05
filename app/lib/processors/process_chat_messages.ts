@@ -24,7 +24,7 @@ export default async function processChatMessages(
   if (!user) {
     await sendWhatsappMessage({
       to: userNumber,
-      text: `I don't know who you are. Please register with me first at mira-assistant-staging.fly.dev/join`,
+      text: `I don't know who you are. Please register with me first at https://mira-assistant-staging.fly.dev/join`,
       humanText: newMessage,
       userId: null,
     });

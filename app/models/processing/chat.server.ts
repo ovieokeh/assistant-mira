@@ -30,7 +30,7 @@ export async function analysePossibleActions({
 
     const { data } = await gpt.createCompletion({
       model: 'text-davinci-003',
-      prompt: `${ACTION_PRIMER(user.currentState)}\n${message}`,
+      prompt: `${ACTION_PRIMER(user.currentState, message)}`,
       temperature: 0.2,
       user: user.phone,
     });
@@ -59,7 +59,7 @@ export async function completeChatMessages({
     const { data } = await gpt.createChatCompletion({
       model: 'gpt-3.5-turbo',
       messages,
-      temperature: 0.2,
+      temperature: 0.5,
       user: phone,
     });
 
