@@ -32,7 +32,6 @@ export async function getUserIdFromSession(request: Request) {
 
 export async function getUser(request: Request): Promise<User | null> {
   const userId = await getUserIdFromSession(request);
-
   const userData = await getUserProfile({ id: userId });
   return userData;
 }
@@ -46,7 +45,7 @@ export async function requireUser(
 
   await logout(request);
   const searchParams = new URLSearchParams([['redirectTo', redirectTo]]);
-  return redirect(`/login?${searchParams}`);
+  throw redirect(`/login?${searchParams}`);
 }
 
 export async function createUserSession({
