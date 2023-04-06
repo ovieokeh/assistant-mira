@@ -46,9 +46,14 @@ export async function saveGoogleOAuthTokens({
   }
 
   const codeToUse = code || savedTokens?.authCode;
-  console.log('code to use', codeToUse);
 
-  const { tokens } = await newClient.getToken(codeToUse as string);
+  const { tokens } = await newClient
+    .getToken(codeToUse as string)
+    .catch((err) => {
+      console.error(`error getting token from code: ${codeToUse}`, err);
+      throw new Error(GOOGLE_TOKEN_ERROR);
+    });
+
   if (!tokens || !tokens.access_token || !tokens.refresh_token) {
     throw new Error(GOOGLE_TOKEN_ERROR);
   }

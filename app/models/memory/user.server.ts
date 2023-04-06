@@ -137,8 +137,8 @@ export const saveUserGoogleOAuthTokens = async ({
         },
       },
       authCode: tokens.authCode || '',
-      token: '',
-      refreshToken: '',
+      token: tokens.token || '',
+      refreshToken: tokens.refreshToken || '',
     },
     update: {
       ...tokens,
