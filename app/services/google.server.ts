@@ -46,6 +46,7 @@ export async function saveGoogleOAuthTokens({
   }
 
   const codeToUse = code || savedTokens?.authCode;
+  console.log('code to use', codeToUse);
 
   const { tokens } = await newClient.getToken(codeToUse as string);
   if (!tokens || !tokens.access_token || !tokens.refresh_token) {
@@ -55,6 +56,7 @@ export async function saveGoogleOAuthTokens({
   await saveUserGoogleOAuthTokens({
     userId,
     tokens: {
+      authCode: code,
       token: tokens.access_token,
       refreshToken: tokens.refresh_token,
     },
