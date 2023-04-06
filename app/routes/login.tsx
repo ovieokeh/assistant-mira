@@ -54,8 +54,6 @@ export const action = async ({ request }: ActionArgs) => {
     return json({ errors }, { status: 400 });
   }
 
-  console.log('phone', phone, 'password', password);
-
   const user = await verifyLogin({ phone, password });
 
   if (!user) {

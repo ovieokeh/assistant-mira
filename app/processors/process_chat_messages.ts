@@ -7,10 +7,10 @@ import { processActionFlow } from '~/flows/action';
 import { processChatFlow } from '~/flows/chat';
 
 import { getUserProfile } from '~/models/memory/user.server';
-import { analysePossibleActions } from '~/models/processing/chat.server';
+import { analysePossibleActions } from '~/models/reasoning/chat.server';
 
 import sendWhatsappMessage from '../helpers/send_whatsapp_message';
-import processReminderFlow from '~/flow-handlers/reminder';
+import processReminderFlow from '~/flows/reminder';
 
 export default async function processChatMessages(
   messages: WhatsappTextMessageContent[]

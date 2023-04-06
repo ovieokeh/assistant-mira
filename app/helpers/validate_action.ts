@@ -6,8 +6,8 @@ import {
   POSSIBLE_ACTIONS,
   REFINE_ACTION,
 } from '~/config/actions';
-import { convertNaturalDateToISO } from '~/models/processing/formatting.server';
-import constructNextActionStepMessage from '../helpers/construct_next_action_step_message';
+import { convertNaturalDateToISO } from '~/models/reasoning/formatting.server';
+import constructNextActionStepMessage from './construct_next_action_step_message';
 import { updateActionFlow } from '~/models/memory/action.server';
 import type { User } from '@prisma/client';
 

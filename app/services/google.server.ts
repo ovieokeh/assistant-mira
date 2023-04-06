@@ -1,7 +1,7 @@
 import type { User } from '@prisma/client';
 import type { OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
-import sendWhatsappMessage from '~/lib/helpers/send_whatsapp_message';
+import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
 import { saveUserGoogleOAuthTokens } from '~/models/memory/user.server';
 import { prisma } from './db.server';
 
@@ -29,9 +29,10 @@ export async function getAuthorisationUrl({
 
 export async function saveGoogleOAuthTokens({
   userId,
+  code,
 }: {
   userId: number;
-  userPhone?: string;
+  code: string;
 }) {
   const newClient = getOAuthClient();
   const savedTokens = await prisma.userToGoogleOAuthCode.findUnique({
@@ -40,11 +41,13 @@ export async function saveGoogleOAuthTokens({
     },
   });
 
-  if (savedTokens?.authCode && savedTokens?.token) {
+  if (!savedTokens?.authCode && !savedTokens?.token && !code) {
     throw new Error('auth code missing');
   }
 
-  const { tokens } = await newClient.getToken(savedTokens?.authCode as string);
+  const codeToUse = code || savedTokens?.authCode;
+
+  const { tokens } = await newClient.getToken(codeToUse as string);
   if (!tokens || !tokens.access_token || !tokens.refresh_token) {
     throw new Error(GOOGLE_TOKEN_ERROR);
   }

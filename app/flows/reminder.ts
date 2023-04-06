@@ -1,8 +1,8 @@
 import type { ChatActionArgs } from '~/types';
 import type { User } from '@prisma/client';
-import { listEvents } from '~/lib/processors/process_reminder_actions';
-import { createSummary } from '~/models/processing/actions.server';
-import sendWhatsappMessage from '~/lib/helpers/send_whatsapp_message';
+import { listEvents } from '~/processors/process_reminder_actions';
+import { createSummary } from '~/models/reasoning/actions.server';
+import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
 import { ActionStatus } from '@prisma/client';
 import { updateActionFlow } from '~/models/memory/action.server';
 

@@ -55,11 +55,7 @@ export async function verifyLogin({
   }
 
   const isValid = await compare(password, userWithPassword.password.hash);
-  console.log('isValid', isValid, password, userWithPassword.password.hash);
-
-  if (!isValid) {
-    return null;
-  }
+  if (!isValid) return null;
 
   const { password: _password, ...userWithoutPassword } = userWithPassword;
 
@@ -125,7 +121,7 @@ export const saveUserGoogleOAuthTokens = async ({
 }: {
   userId: number;
   tokens: {
-    authCode?: string;
+    authCode?: string | null;
     token?: string;
     refreshToken?: string;
   };

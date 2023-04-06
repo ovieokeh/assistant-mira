@@ -2,9 +2,9 @@ import invariant from 'tiny-invariant';
 
 import type { UserWithProfile, WhatsappTextMessageContent } from '~/types';
 
-import prepareChatContext from '~/lib/formatters/prepare_chat_context';
-import sendWhatsappMessage from '~/lib/helpers/send_whatsapp_message';
-import { completeChatMessages } from '~/models/processing/chat.server';
+import prepareChatContext from '~/helpers/prepare_chat_context';
+import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
+import { completeChatMessages } from '~/models/reasoning/chat.server';
 
 export async function processChatFlow({
   user,

@@ -1,7 +1,7 @@
 import type { UnformattedMessage, UserWithProfile } from '~/types';
 import type { Message } from '@prisma/client';
 import { Role } from '@prisma/client';
-import { CHAT_PRIMER } from '../../config/prompts';
+import { CHAT_PRIMER } from '../config/prompts';
 import { getUserMessages } from '~/models/memory/user.server';
 
 export default async function prepareChatContext({

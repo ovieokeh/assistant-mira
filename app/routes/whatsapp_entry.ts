@@ -1,8 +1,8 @@
 import type { ActionArgs, LoaderArgs } from '@remix-run/node';
 import { json } from '@remix-run/node';
-import formatWhatsappMessages from '~/lib/formatters/format_whatsapp_messages';
-import processAudioMessages from '~/lib/processors/process_audio_messages';
-import processChatMessages from '~/lib/processors/process_chat_messages';
+import formatWhatsappMessages from '~/helpers/format_whatsapp_messages';
+import processAudioMessages from '~/processors/process_audio_messages';
+import processChatMessages from '~/processors/process_chat_messages';
 import type {
   WhatsappAudioMessageContent,
   WhatsappTextMessageContent,

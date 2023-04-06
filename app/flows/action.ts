@@ -3,8 +3,8 @@ import type { User } from '@prisma/client';
 import { ActionStatus } from '@prisma/client';
 import { MessagingState } from '@prisma/client';
 
-import constructNextActionStepMessage from '~/lib/helpers/construct_next_action_step_message';
-import sendWhatsappMessage from '~/lib/helpers/send_whatsapp_message';
+import constructNextActionStepMessage from '~/helpers/construct_next_action_step_message';
+import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
 import { setUserMessagingState } from '~/models/memory/user.server';
 import { updateActionFlow } from '~/models/memory/action.server';
 

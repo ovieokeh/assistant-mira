@@ -2,13 +2,13 @@ import { ConversionState } from '@prisma/client';
 import type { ActionArgs } from '@remix-run/node';
 import { json } from '@remix-run/node';
 import type { JobEventData } from 'cloudconvert/built/lib/JobsResource';
-import sendWhatsappMessage from '~/lib/helpers/send_whatsapp_message';
+import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
 import {
   getConversionJob,
   updateConversionJob,
 } from '~/models/memory/conversion.server';
 import { getUserProfile } from '~/models/memory/user.server';
-import { createTranscription } from '~/models/processing/actions.server';
+import { createTranscription } from '~/models/reasoning/actions.server';
 
 export async function action({ request }: ActionArgs) {
   let statusCode = 400;

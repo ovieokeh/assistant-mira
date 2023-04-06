@@ -3,7 +3,7 @@ import https from 'https';
 
 import { CREATE_SUMMARY_PRIMER, TRANSCRIPTION_PROMPT } from '~/config/prompts';
 import { gpt } from '~/services/gpt.server';
-import exec from '~/lib/helpers/exec';
+import exec from '~/helpers/exec';
 import invariant from 'tiny-invariant';
 
 const generateRandomId = () => Math.random().toString(36).substring(2, 15);
