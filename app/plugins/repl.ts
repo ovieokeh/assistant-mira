@@ -18,10 +18,8 @@ export const pluginDescription: PluginDetail = {
 
 export default async function repl(config: any, code: string) {
   try {
-    console.log('evaluated code >>>>>>>>>>', code);
     // eslint-disable-next-line no-eval
     const codeEval = eval(code);
-    console.log('result code >>>>>>>>>>', codeEval);
     return codeEval;
   } catch (e) {
     return `Error: ${e}`;

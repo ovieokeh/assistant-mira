@@ -1,4 +1,4 @@
-import type { WhatsappMessage } from '~/types';
+import type { ConversationMessage, WhatsappMessage } from '~/types';
 import { Role } from '@prisma/client';
 import axios from 'axios';
 
@@ -25,21 +25,24 @@ export default async function sendWhatsappMessage(message: WhatsappMessage) {
     console.error('send message error', error.response.data);
   });
 
-  const conversationToSave = [];
+  const conversationToSave: ConversationMessage[] = [];
   if (message.humanText) {
     conversationToSave.push({
       userId: message.userId,
       role: Role.user,
       content: message.humanText,
       actionId: message.actionId || null,
+      hash: message.hash || undefined,
     });
   }
+
   if (message.text) {
     conversationToSave.push({
       userId: message.userId,
       role: Role.assistant,
       content: message.text,
       actionId: message.actionId || null,
+      hash: null,
     });
   }
 

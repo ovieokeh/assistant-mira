@@ -24,7 +24,7 @@ export const updateActionFlow = async ({
   action,
 }: {
   user: User;
-  action: Partial<Pick<Action, 'id' | 'name' | 'status'>>;
+  action: Partial<Pick<Action, 'id' | 'name' | 'status' | 'tool'>>;
 }) => {
   if (!action.id) {
     return await prisma.action.create({
@@ -36,6 +36,7 @@ export const updateActionFlow = async ({
         },
         name: action.name as string,
         status: action.status || ActionStatus.PENDING,
+        tool: action.tool as string,
       },
     });
   }
@@ -49,7 +50,7 @@ export const updateActionFlow = async ({
     },
   });
 
-  if (action.id) {
+  if (action.id && ActionStatus.COMPLETED) {
     setUserMessagingState({
       phone: user.phone,
       state: MessagingState.CHAT,

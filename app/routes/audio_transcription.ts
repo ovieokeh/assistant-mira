@@ -2,6 +2,7 @@ import { ConversionState } from '@prisma/client';
 import type { ActionArgs } from '@remix-run/node';
 import { json } from '@remix-run/node';
 import type { JobEventData } from 'cloudconvert/built/lib/JobsResource';
+import createHash from '~/helpers/createHash';
 import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
 import {
   getConversionJob,
@@ -9,6 +10,7 @@ import {
 } from '~/models/memory/conversion.server';
 import { getUserProfile } from '~/models/memory/user.server';
 import { createTranscription } from '~/models/reasoning/actions.server';
+import type { WhatsappMessage } from '~/types';
 
 export async function action({ request }: ActionArgs) {
   let statusCode = 400;
@@ -48,12 +50,15 @@ export async function action({ request }: ActionArgs) {
 
         if (!user) continue;
 
-        const message = {
+        const message: WhatsappMessage = {
           to: jobInDb.user,
           humanText: 'You sent an audio file.',
           text: `Here's your transcription: \n\n${transcription}\n\n`,
           userId: user.id,
+          hash: null,
         };
+
+        message.hash = createHash(message.text);
 
         await sendWhatsappMessage(message);
       }

@@ -32,20 +32,18 @@ export async function getUserIdFromSession(request: Request) {
 
 export async function getUser(request: Request): Promise<User | null> {
   const userId = await getUserIdFromSession(request);
+
+  if (!userId) return null;
+
   const userData = await getUserProfile({ id: userId });
   return userData;
 }
 
-export async function requireUser(
-  request: Request,
-  redirectTo: string = new URL(request.url).pathname
-) {
+export async function requireUser(request: Request, redirectTo?: string) {
   const user = await getUser(request);
   if (user) return user;
 
-  await logout(request);
-  const searchParams = new URLSearchParams([['redirectTo', redirectTo]]);
-  throw redirect(`/login?${searchParams}`);
+  throw await logout(request, redirectTo || `/login`);
 }
 
 export async function createUserSession({
@@ -73,9 +71,11 @@ export async function createUserSession({
   });
 }
 
-export async function logout(request: Request) {
+export async function logout(request: Request, redirectTo: string = '/') {
   const session = await getSession(request);
-  return redirect('/', {
+  session.unset(USER_SESSION_ID_KEY);
+
+  return redirect(redirectTo, {
     headers: {
       'Set-Cookie': await sessionStorage.destroySession(session),
     },

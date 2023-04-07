@@ -35,7 +35,7 @@ async function seed() {
     },
   });
 
-  console.log('Database has been seeded. 🌱');
+  console.info('Database has been seeded. 🌱');
 }
 
 seed()

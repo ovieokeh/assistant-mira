@@ -82,6 +82,7 @@ model Message {
   user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   actionId  Int?
   action    Action?   @relation(fields: [actionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  hash      Int?
 }
 
 model Action {
@@ -93,6 +94,7 @@ model Action {
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   userId    Int
   status    ActionStatus @default(PENDING)
+  tool      String
 }
 
 enum ActionStatus {

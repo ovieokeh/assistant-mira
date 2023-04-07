@@ -1,4 +1,5 @@
-import type { User } from '@prisma/client';
+import type { Action, User } from '@prisma/client';
+import { ActionStatus } from '@prisma/client';
 import type { ChatCompletionRequestMessage } from 'openai';
 import type { PluginDetail } from '~/types';
 import { ChatCompletionRequestMessageRoleEnum } from 'openai';
@@ -14,6 +15,11 @@ import {
   GET_TOOL_FROM_MESSAGE_PROMPT,
   CREATE_TOOL_RESULT_SUMMARY,
 } from '~/config/prompts';
+import {
+  getCurrentActionFlow,
+  updateActionFlow,
+} from '~/models/memory/action.server';
+import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
 
 export const PLUGIN_REGISTRY = [
   calendarPluginDescription,
@@ -28,12 +34,12 @@ const PLUGIN_MAP: {
   repl,
 };
 
-const PLUGIN_DISPLAY_NAME_MAP: {
-  [key: string]: string;
+export const PLUGIN_DISPLAY_NAME_MAP: {
+  [key: string]: PluginDetail;
 } = {
-  calendar: calendarPluginDescription.displayName,
-  search: searchPluginDescription.displayName,
-  repl: replPluginDescription.displayName,
+  calendar: calendarPluginDescription,
+  search: searchPluginDescription,
+  repl: replPluginDescription,
 };
 
 export const getAvailablePlugins = () =>
@@ -66,19 +72,57 @@ const defaultPluginsPrimer = {
 export async function checkForActions({
   message,
   previousMessages,
+  currentAction,
+  user,
 }: {
   message: string;
   previousMessages: ChatCompletionRequestMessage[];
+  currentAction?: Action;
+  user: User;
 }): Promise<any> {
   previousMessages.unshift(defaultPluginsPrimer);
+  const [, toolInvocation] = message.split('Run tool:');
+
+  const endOfToolName = toolInvocation?.indexOf('(');
+  let toolName = toolInvocation?.slice(0, endOfToolName);
+  toolName = toolName?.trim();
 
   const checkResponse = await getChatCompletion({
     messages: [...previousMessages],
   });
 
-  console.log('Checking for actions with message:', message, checkResponse);
-  const shouldRunTool = checkResponse.content.includes('Run tool:');
-  return shouldRunTool ? checkResponse.content : null;
+  switch (checkResponse.content) {
+    case 'Cancel':
+      if (currentAction) {
+        await updateActionFlow({
+          user,
+          action: {
+            ...currentAction,
+            tool: toolName,
+            status: ActionStatus.CANCELLED,
+          },
+        });
+      }
+      break;
+
+    default:
+      const shouldRunTool = checkResponse.content.includes('Run tool:');
+      const shouldRefineResponse = checkResponse.content.includes('Refine:');
+      const shouldChat = checkResponse.content.includes('Chat');
+
+      return {
+        message: checkResponse.content,
+
+        action: shouldRunTool
+          ? 'runPlugin'
+          : shouldRefineResponse
+          ? 'refineResponse'
+          : shouldChat
+          ? 'chat'
+          : null,
+        isRefineAction: shouldRefineResponse,
+      };
+  }
 }
 
 export async function runPlugin({
@@ -86,37 +130,112 @@ export async function runPlugin({
   userQuery,
   message,
   previousMessages,
+  currentAction,
 }: {
   user: User;
   userQuery: string;
   message: string;
-  previousMessages: ChatCompletionRequestMessage[];
+  previousMessages: any[];
+  currentAction?: Action;
 }): Promise<any> {
-  previousMessages.unshift(defaultPluginsPrimer);
-
-  console.log('Running plugin:', message);
-  // console.log("Previous messages:", previousMessages);
-
+  let previousAction: any = currentAction || (await getCurrentActionFlow(user));
   const [, toolInvocation] = message.split('Run tool:');
+
+  if (!toolInvocation) {
+    return { message: 'No tool specified' };
+  }
 
   const endOfToolName = toolInvocation.indexOf('(');
   let toolName = toolInvocation.slice(0, endOfToolName);
   let toolArgs = toolInvocation.slice(endOfToolName + 2, -2);
   toolName = toolName.trim();
-  console.log(toolInvocation, 'Running', toolName, 'with args:', toolArgs);
+  const tool = PLUGIN_MAP[toolName];
+  const toolDisplayName = PLUGIN_DISPLAY_NAME_MAP[toolName].displayName;
+
+  previousMessages.unshift(defaultPluginsPrimer);
+
+  const toolInfo = PLUGIN_DISPLAY_NAME_MAP[previousAction?.tool];
+  if (!previousAction) {
+    previousAction = await updateActionFlow({
+      user,
+      action: {
+        name: 'Run tool',
+        tool: toolName,
+        status: ActionStatus.PENDING,
+      },
+    });
+  } else if (toolInfo) {
+    const actionContext = previousMessages.filter(
+      (message) => message?.actionId === previousAction?.id
+    );
+    let runningArguments: {
+      role: string;
+      content: string;
+    }[] = [];
+    const toolInfo = PLUGIN_DISPLAY_NAME_MAP[previousAction.tool];
+    const actionFlow = previousMessages
+      .map((message) => {
+        const agent =
+          message.role === ChatCompletionRequestMessageRoleEnum.User
+            ? 'User'
+            : 'You';
+
+        runningArguments.push({
+          role: agent,
+          content: message.content,
+        });
+        const step = `${agent}: ${message.content}`;
+        return step;
+      })
+      .join('\n');
+
+    previousMessages.push(
+      {
+        role: ChatCompletionRequestMessageRoleEnum.System,
+        content: `
+            You are currently running the ${toolInfo.displayName} tool.
+            Here are your available tools:
+            ${getAvailablePlugins()}
+    
+            You have run the following steps:
+            ${actionFlow}
+    
+            You have the following responses to the tool's arguments from the user:
+            ${runningArguments
+              .map((arg) => `${arg.role}: ${arg.content}`)
+              .join('\n')}
+            
+            - Is the user passing arguments to the tool?
+            - - If yes and you have enough information to run the tool
+            - - - Respond with Run tool: ${
+              toolInfo.name
+            }(${runningArguments.join(', ')})
+            - - If no
+            - - - Respond with Refine:<missing information>
+            - If no and they have changed topics/tools or want to cancel the current action
+            - - Respond with Cancel
+          `,
+      },
+      ...actionContext.map((message) => ({
+        role: message.role,
+        content: message.content,
+        actionId: message.actionId,
+      }))
+    );
+  }
 
   let toolResult;
-  const tool = PLUGIN_MAP[toolName];
-  const toolDisplayName = PLUGIN_DISPLAY_NAME_MAP[toolName];
   try {
     toolResult = await tool({ user }, toolArgs);
   } catch (error) {
     console.error('Error running tool:', error);
-    toolResult =
-      'An error occurred running the tool. Please request for different input or try a different tool.';
-  }
 
-  console.log('Tool result:', toolResult);
+    return await sendWhatsappMessage({
+      userId: null,
+      to: user.phone,
+      text: `Error running tool: ${error}`,
+    });
+  }
 
   const toolResponseMessage = {
     role: ChatCompletionRequestMessageRoleEnum.System,
@@ -128,14 +247,11 @@ export async function runPlugin({
     }),
   };
 
-  // console.log(toolName, "result", toolResult);
   const toolResponseSummary = await getChatCompletion({
     messages: [...previousMessages, toolResponseMessage],
   });
 
   const toolResponseSummaryMessage = toolResponseSummary.content;
-
-  console.log('Tool response summary:', toolResponseSummaryMessage);
 
   USED_TOOLS_RESULTS_MAPPING.push({
     name: toolDisplayName,
@@ -161,16 +277,28 @@ export async function runPlugin({
 
   const checkResponseMessage = toolResponseCheckSummary.content;
   const shouldRunTool = checkResponseMessage.includes('Run tool:');
-  console.log('Check tool result response message:', checkResponseMessage);
 
   if (shouldRunTool) {
     return await runPlugin({
       user,
       userQuery,
       message: checkResponseMessage,
+      currentAction: previousAction,
       previousMessages: [...previousMessages, toolResponseMessage],
     });
   }
 
-  return { message: toolResponseSummaryMessage, result: toolResult };
+  await updateActionFlow({
+    user,
+    action: {
+      ...previousAction,
+      status: ActionStatus.COMPLETED,
+    },
+  });
+
+  return {
+    message: toolResponseSummaryMessage,
+    result: toolResult,
+    action: previousAction,
+  };
 }

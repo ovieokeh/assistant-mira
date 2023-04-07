@@ -28,6 +28,5 @@ export default async function search(config: any, query: string) {
       };
     });
 
-  // console.log('Search results:', sanitisedResults);
   return sanitisedResults;
 }

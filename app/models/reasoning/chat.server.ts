@@ -13,20 +13,20 @@ export async function getChatCompletion({
   messages: ChatCompletionRequestMessage[];
   temperature?: number;
 }): Promise<ChatCompletionResponseMessage> {
+  const prompt = [
+    ...messages.map((message) => {
+      return {
+        role: message.role,
+        content: message.content,
+      };
+    }),
+  ];
+
   const { data } = await gpt.createChatCompletion({
     model: 'gpt-3.5-turbo',
-    messages: [
-      {
-        role: ChatCompletionRequestMessageRoleEnum.System,
-        content: `
-          Please format your response as a chat message.
-          Use line breaks to separate long messages.
-          Use punctuations and emojis when necessary.
-        `,
-      },
-      ...messages,
-    ],
+    messages: prompt,
     temperature,
+    user: Math.random().toString(36).substring(7),
   });
 
   const response = data.choices[0].message;

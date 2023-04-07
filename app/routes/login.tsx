@@ -142,7 +142,7 @@ export default function LoginPage() {
                 ref={passwordRef}
                 name="password"
                 type="password"
-                autoComplete="password"
+                autoComplete="current-password"
                 placeholder="Enter password"
                 aria-invalid={actionData?.errors?.password ? true : undefined}
                 aria-describedby="password-error"

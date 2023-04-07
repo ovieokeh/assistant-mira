@@ -1,12 +1,13 @@
 import type { User } from '@prisma/client';
+import type { ChatCompletionRequestMessageRoleEnum } from 'openai';
 
 export type ElementType<T extends ReadonlyArray<unknown>> =
   T extends ReadonlyArray<infer ElementType> ? ElementType : never;
 
 export type UserWithProfile = User & {
   profile: {
-    data: string | null;
-  } | null;
+    data: string;
+  };
 };
 
 export type UnformattedMessage = {
@@ -72,6 +73,15 @@ export type WhatsappMessage = {
   humanText?: string;
   userId: number | null;
   actionId?: number;
+  hash?: number | null;
+};
+
+export type ConversationMessage = {
+  userId: number | null;
+  actionId?: number | null;
+  hash?: number | null;
+  content: string;
+  role: ChatCompletionRequestMessageRoleEnum;
 };
 
 export type ChatActionArgs = Record<

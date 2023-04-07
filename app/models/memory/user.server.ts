@@ -68,7 +68,11 @@ export const getUserProfile = async ({
 }: {
   id?: User['id'];
   phone?: User['phone'];
-}) => {
+}): Promise<null | UserWithProfile> => {
+  if (!id && !phone) {
+    return null;
+  }
+
   let user = await prisma.user.findFirst({
     where: { OR: [{ id }, { phone }] },
     include: {

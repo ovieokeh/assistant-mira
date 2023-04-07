@@ -31,7 +31,7 @@ export function validatePhone(phone: string) {
   const result = isPossiblePhoneNumber(
     `${phone.includes('+') ? '' : '+'}${phone}`
   );
-  console.log('result', result, `${phone.includes('+') ? '' : '+'}${phone}`);
+
   return result;
 }
 

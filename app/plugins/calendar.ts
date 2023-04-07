@@ -7,12 +7,6 @@ export const pluginDescription: PluginDetail = {
   displayName: 'Google Calendar API',
   description: `
     Provides access to the next 10 events on your calendar.
-
-    Example:
-    \`\`\`
-    > calendar()
-    <json array of events>
-    \`\`\`
   `,
   usage: 'calendar(query)',
 };

@@ -7,6 +7,10 @@ import sendWhatsappMessage from '../helpers/send_whatsapp_message';
 import prepareChatContext from '~/helpers/prepare_chat_context';
 import { checkForActions, runPlugin } from '~/plugins';
 import { getChatCompletion } from '~/models/reasoning/chat.server';
+import type { Action } from '@prisma/client';
+import { Role } from '@prisma/client';
+import createHash from '~/helpers/createHash';
+import { DEFAULT_CHAT_PROMPT } from '~/config/prompts';
 
 export default async function processChatMessages(
   messages: WhatsappTextMessageContent[]
@@ -15,6 +19,7 @@ export default async function processChatMessages(
 
   const userNumber = messages[0].from;
   const newMessage = messages[0].text.body;
+
   const user = await getUserProfile({ phone: userNumber });
 
   if (!user) {
@@ -26,10 +31,14 @@ export default async function processChatMessages(
     });
     return true;
   }
+
+  const messageHash = createHash(newMessage);
+
   try {
-    const chatContext = await prepareChatContext({
+    const { chatContext } = await prepareChatContext({
       user,
       newMessages: messages,
+      messageHash,
     });
 
     const messageBody = {
@@ -38,48 +47,60 @@ export default async function processChatMessages(
       userId: user.id,
     };
 
-    const action = await checkForActions({
+    const actionAnalysisResponse = await checkForActions({
+      user,
       message: newMessage,
       previousMessages: chatContext,
     });
 
-    if (action) {
-      const { isRefineAction, message } = await runPlugin({
+    if (!actionAnalysisResponse) return;
+
+    const { message: actionAnalysis, action } = actionAnalysisResponse;
+
+    if (action === 'refineResponse') {
+      return await sendWhatsappMessage({
+        ...messageBody,
+        text: actionAnalysis,
+      });
+    }
+
+    if (action === 'runPlugin') {
+      const { message, action: actionInDb } = await runPlugin({
         userQuery: newMessage,
         user,
-        message: action,
+        message: actionAnalysis,
         previousMessages: chatContext,
       });
 
-      if (isRefineAction) {
-        await sendWhatsappMessage({
-          ...messageBody,
-          text: `I'm sorry, I don't understand what you mean.`,
-        });
-      }
-
-      await sendWhatsappMessage({
+      return await sendWhatsappMessage({
         to: userNumber,
         humanText: messages[0].text.body,
         text: message,
         userId: user.id,
+        actionId: actionInDb?.id,
       });
-      return true;
     }
 
     const baseResponse = await getChatCompletion({
-      messages: chatContext,
+      messages: [
+        {
+          role: Role.system,
+          content: DEFAULT_CHAT_PROMPT({
+            name: user.name,
+            bio: user.profile.data,
+          }),
+        },
+        ...chatContext,
+      ],
     });
 
-    await sendWhatsappMessage({
+    return await sendWhatsappMessage({
       to: userNumber,
       humanText: messages[0].text.body,
       text: baseResponse.content,
       userId: user.id,
     });
-
-    return true;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error processing chat messages:', error);
     await sendWhatsappMessage({
       to: userNumber,
@@ -87,6 +108,5 @@ export default async function processChatMessages(
       text: 'Sorry, I had an error processing your message. Please try again.',
       userId: user.id,
     });
-    return false;
   }
 }

@@ -16,8 +16,6 @@ export async function searchApi(query: string) {
   );
 
   const responseData = await response.json();
-  // console.log("Search response data:", responseData);
-
   return responseData as {
     webPages: {
       value: WebPage[];
