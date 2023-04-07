@@ -1,16 +1,12 @@
 // TODO: Hash messages to prevent duplicates
 
 import type { WhatsappTextMessageContent } from '~/types';
-import { CHAT_ACTION, FETCH_REMINDERS, REFINE_ACTION } from '~/config/actions';
-
-import { processActionFlow } from '~/flows/action';
-import { processChatFlow } from '~/flows/chat';
 
 import { getUserProfile } from '~/models/memory/user.server';
-import { analysePossibleActions } from '~/models/reasoning/chat.server';
-
 import sendWhatsappMessage from '../helpers/send_whatsapp_message';
-import processReminderFlow from '~/flows/reminder';
+import prepareChatContext from '~/helpers/prepare_chat_context';
+import { checkForActions, runPlugin } from '~/plugins';
+import { getChatCompletion } from '~/models/reasoning/chat.server';
 
 export default async function processChatMessages(
   messages: WhatsappTextMessageContent[]
@@ -30,56 +26,67 @@ export default async function processChatMessages(
     });
     return true;
   }
-
-  const actionAnalysis = await analysePossibleActions({
-    message: newMessage,
-    user,
-  });
-
-  const messageBody = {
-    to: userNumber,
-    humanText: newMessage,
-    userId: user.id,
-  };
-
-  if (!actionAnalysis) {
-    await sendWhatsappMessage({
-      ...messageBody,
-      text: `I'm sorry, I don't understand what you mean.`,
+  try {
+    const chatContext = await prepareChatContext({
+      user,
+      newMessages: messages,
     });
-    return true;
-  }
 
-  switch (actionAnalysis.action) {
-    case REFINE_ACTION:
-      await processActionFlow({
+    const messageBody = {
+      to: userNumber,
+      humanText: newMessage,
+      userId: user.id,
+    };
+
+    const action = await checkForActions({
+      message: newMessage,
+      previousMessages: chatContext,
+    });
+
+    if (action) {
+      const { isRefineAction, message } = await runPlugin({
+        userQuery: newMessage,
         user,
-        messageData: messageBody,
-        action: actionAnalysis.action,
-        actionFlowId: actionAnalysis.actionFlowId,
-        args: actionAnalysis.args,
+        message: action,
+        previousMessages: chatContext,
       });
-      break;
 
-    case CHAT_ACTION:
-      await processChatFlow({ user, messages });
-      break;
+      if (isRefineAction) {
+        await sendWhatsappMessage({
+          ...messageBody,
+          text: `I'm sorry, I don't understand what you mean.`,
+        });
+      }
 
-    case FETCH_REMINDERS:
-      await processReminderFlow({
-        user,
-        args: actionAnalysis.args,
-        action: actionAnalysis.action,
-        actionFlowId: actionAnalysis.actionFlowId,
-      });
-      break;
-
-    default:
       await sendWhatsappMessage({
-        ...messageBody,
-        text: `I'm sorry, I don't understand what you mean.`,
+        to: userNumber,
+        humanText: messages[0].text.body,
+        text: message,
+        userId: user.id,
       });
-  }
+      return true;
+    }
 
-  return true;
+    const baseResponse = await getChatCompletion({
+      messages: chatContext,
+    });
+
+    await sendWhatsappMessage({
+      to: userNumber,
+      humanText: messages[0].text.body,
+      text: baseResponse.content,
+      userId: user.id,
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Error processing chat messages:', error);
+    await sendWhatsappMessage({
+      to: userNumber,
+      humanText: messages[0].text.body,
+      text: 'Sorry, I had an error processing your message. Please try again.',
+      userId: user.id,
+    });
+    return false;
+  }
 }

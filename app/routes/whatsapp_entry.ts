@@ -54,8 +54,8 @@ export async function action({ request }: ActionArgs) {
     statusCode = 200;
     response = 'RESPONSE_FLOW_STARTED';
     return json(response, statusCode);
-  } catch (error) {
-    console.error(error);
+  } catch (error: any) {
+    console.error(error?.response?.data);
     return json(error, statusCode);
   }
 }

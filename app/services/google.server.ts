@@ -54,7 +54,8 @@ export async function saveGoogleOAuthTokens({
       throw new Error(GOOGLE_TOKEN_ERROR);
     });
 
-  if (!tokens || !tokens.access_token || !tokens.refresh_token) {
+  if (!tokens || !tokens.access_token) {
+    console.error(`error getting token from code: ${codeToUse}`, tokens);
     throw new Error(GOOGLE_TOKEN_ERROR);
   }
 
@@ -63,7 +64,7 @@ export async function saveGoogleOAuthTokens({
     tokens: {
       authCode: code,
       token: tokens.access_token,
-      refreshToken: tokens.refresh_token,
+      refreshToken: tokens?.refresh_token || '',
     },
   });
 
@@ -90,8 +91,10 @@ export async function getCalendarClient({ user }: { user: User }) {
     },
   });
 
-  if (!savedTokens?.token || !savedTokens?.refreshToken) {
+  if (!savedTokens?.token) {
     const authorisationUrl = await getAuthorisationUrl({ client: clientAuth });
+
+    console.log(authorisationUrl);
 
     await sendWhatsappMessage({
       userId: user.id,

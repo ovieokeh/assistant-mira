@@ -82,3 +82,10 @@ export type ChatActionArgs = Record<
     isValid: boolean;
   }
 >;
+
+export type PluginDetail = {
+  name: string;
+  displayName: string;
+  description: string;
+  usage: string;
+};
