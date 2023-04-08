@@ -56,6 +56,8 @@ export default async function processChatMessages(
 
     if (!actionAnalysisResponse) return;
 
+    console.log('Action analysis:', actionAnalysisResponse);
+
     const { message: actionAnalysis, action } = actionAnalysisResponse;
 
     if (action === 'refineResponse') {

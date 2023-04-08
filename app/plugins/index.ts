@@ -9,7 +9,11 @@ import calendar, {
 } from './calendar';
 import search, { pluginDescription as searchPluginDescription } from './search';
 import repl, { pluginDescription as replPluginDescription } from './repl';
-import { getChatCompletion } from '~/models/reasoning/chat.server';
+import {
+  compareOutputWithPrompt,
+  extractAction,
+  getChatCompletion,
+} from '~/models/reasoning/chat.server';
 import {
   CHECK_IF_BETTER_TOOL_PROMPT,
   GET_TOOL_FROM_MESSAGE_PROMPT,
@@ -64,11 +68,6 @@ const USED_TOOLS_RESULTS_MAPPING: {
   result: string;
 }[] = [];
 
-const defaultPluginsPrimer = {
-  role: ChatCompletionRequestMessageRoleEnum.System,
-  content: GET_TOOL_FROM_MESSAGE_PROMPT(),
-};
-
 export async function checkForActions({
   message,
   previousMessages,
@@ -80,26 +79,18 @@ export async function checkForActions({
   currentAction?: Action;
   user: User;
 }): Promise<any> {
-  previousMessages.unshift(defaultPluginsPrimer);
-  const [, toolInvocation] = message.split('Run tool:');
-
-  const endOfToolName = toolInvocation?.indexOf('(');
-  let toolName = toolInvocation?.slice(0, endOfToolName);
-  toolName = toolName?.trim();
-
-  const checkResponse = await getChatCompletion({
-    messages: [...previousMessages],
-    temperature: 0.2,
+  const actionExtract = await extractAction({
+    message,
   });
 
-  switch (checkResponse.content) {
+  switch (actionExtract) {
     case 'Cancel':
       if (currentAction) {
         await updateActionFlow({
           user,
           action: {
             ...currentAction,
-            tool: toolName,
+            tool: currentAction.tool || 'none',
             status: ActionStatus.CANCELLED,
           },
         });
@@ -107,12 +98,12 @@ export async function checkForActions({
       break;
 
     default:
-      const shouldRunTool = checkResponse.content.includes('Run tool:');
-      const shouldRefineResponse = checkResponse.content.includes('Refine:');
-      const shouldChat = checkResponse.content.includes('Chat');
+      const shouldRunTool = actionExtract.includes('Run tool');
+      const shouldRefineResponse = actionExtract.includes('Refine');
+      const shouldChat = actionExtract.includes('Chat');
 
       return {
-        message: checkResponse.content,
+        message: actionExtract,
 
         action: shouldRunTool
           ? 'runPlugin'
@@ -121,14 +112,14 @@ export async function checkForActions({
           : shouldChat
           ? 'chat'
           : null,
-        isRefineAction: shouldRefineResponse,
       };
   }
 }
 
-let hasSuppliedDefaultPluginsPrimerPrompt = false;
-let hasSuppliedResponseSummaryPrimerPrompt = false;
-let hasSuppliedBetterToolPrompt = false;
+let runningArguments: {
+  role: string;
+  content: string;
+}[] = [];
 export async function runPlugin({
   user,
   userQuery,
@@ -149,20 +140,19 @@ export async function runPlugin({
     return { message: 'No tool specified' };
   }
 
+  const originalMessages = [...previousMessages];
+
   const endOfToolName = toolInvocation.indexOf('(');
   let toolName = toolInvocation.slice(0, endOfToolName);
   let toolArgs = toolInvocation.slice(endOfToolName + 2, -2);
   toolName = toolName.trim();
+
+  if (!toolName) throw new Error('No tool name specified');
   const tool = PLUGIN_MAP[toolName];
-  const toolDisplayName = PLUGIN_DISPLAY_NAME_MAP[toolName].displayName;
+  const toolDisplayName = PLUGIN_DISPLAY_NAME_MAP[toolName]?.displayName;
 
   console.log('toolName', toolName);
   console.log('toolArgs', toolArgs);
-
-  if (!hasSuppliedDefaultPluginsPrimerPrompt) {
-    previousMessages.unshift(defaultPluginsPrimer);
-    hasSuppliedDefaultPluginsPrimerPrompt = true;
-  }
 
   const toolInfo = PLUGIN_DISPLAY_NAME_MAP[previousAction?.tool];
   if (!previousAction) {
@@ -174,15 +164,11 @@ export async function runPlugin({
         status: ActionStatus.PENDING,
       },
     });
-  } else if (toolInfo) {
+  } else if (previousAction && toolInfo?.name) {
     const actionContext = previousMessages.filter(
       (message) => message?.actionId === previousAction?.id
     );
-    let runningArguments: {
-      role: string;
-      content: string;
-    }[] = [];
-    const toolInfo = PLUGIN_DISPLAY_NAME_MAP[previousAction.tool];
+
     const actionFlow = previousMessages
       .map((message) => {
         const agent =
@@ -260,13 +246,10 @@ export async function runPlugin({
   };
 
   let messagesWithCreateToolResultSummaryPrompt = [...previousMessages];
-  if (!hasSuppliedResponseSummaryPrimerPrompt) {
-    messagesWithCreateToolResultSummaryPrompt = [
-      ...messagesWithCreateToolResultSummaryPrompt,
-      toolResponseMessage,
-    ];
-    hasSuppliedResponseSummaryPrimerPrompt = true;
-  }
+  messagesWithCreateToolResultSummaryPrompt = [
+    ...messagesWithCreateToolResultSummaryPrompt,
+    toolResponseMessage,
+  ];
 
   const toolResponseSummary = await getChatCompletion({
     messages: messagesWithCreateToolResultSummaryPrompt,
@@ -274,6 +257,7 @@ export async function runPlugin({
   });
 
   const toolResponseSummaryMessage = toolResponseSummary.content;
+  console.log('toolResponseSummaryMessage', toolResponseSummaryMessage);
 
   USED_TOOLS_RESULTS_MAPPING.push({
     name: toolDisplayName,
@@ -284,40 +268,20 @@ export async function runPlugin({
     (tool) => `${tool.name}: ${tool.result}`
   ).join('\n');
 
-  // const toolResponseCheckMessage = {
-  //   role: ChatCompletionRequestMessageRoleEnum.System,
-  //   content: CHECK_IF_BETTER_TOOL_PROMPT({
-  //     userQuery,
-  //     userBio: user.profile.data,
-  //     previouslyUsedTools,
-  //     currentResponse: toolResponseSummaryMessage,
-  //   }),
-  // };
+  const shouldRunAgain = await compareOutputWithPrompt(
+    userQuery,
+    toolResponseSummaryMessage
+  );
 
-  let messagesWithCheckIfBetterToolPrompt = [...previousMessages];
-  // if (!hasSuppliedBetterToolPrompt && !hasSuppliedDefaultPluginsPrimerPrompt) {
-  //   messagesWithCheckIfBetterToolPrompt = [
-  //     ...messagesWithCheckIfBetterToolPrompt,
-  //     toolResponseCheckMessage,
-  //   ];
-  //   hasSuppliedBetterToolPrompt = true;
-  //   hasSuppliedDefaultPluginsPrimerPrompt = true;
-  // }
+  console.log({ shouldRunAgain });
 
-  const toolResponseCheckSummary = await getChatCompletion({
-    messages: messagesWithCheckIfBetterToolPrompt,
-  });
-
-  const checkResponseMessage = toolResponseCheckSummary.content;
-  const shouldRunTool = checkResponseMessage.includes('Run tool:');
-
-  if (shouldRunTool) {
+  if (shouldRunAgain) {
     return await runPlugin({
       user,
       userQuery,
-      message: checkResponseMessage,
+      message,
       currentAction: previousAction,
-      previousMessages: [...previousMessages, toolResponseMessage],
+      previousMessages: [...originalMessages],
     });
   }
 
