@@ -1,7 +1,7 @@
 import type { Action, User } from '@prisma/client';
 import { ActionStatus } from '@prisma/client';
 import type { ChatCompletionRequestMessage } from 'openai';
-import type { PluginDetail } from '~/types';
+import type { PluginDetail, UserWithProfile } from '~/types';
 import { ChatCompletionRequestMessageRoleEnum } from 'openai';
 
 import calendar, {
@@ -89,6 +89,7 @@ export async function checkForActions({
 
   const checkResponse = await getChatCompletion({
     messages: [...previousMessages],
+    temperature: 0.2,
   });
 
   switch (checkResponse.content) {
@@ -125,6 +126,9 @@ export async function checkForActions({
   }
 }
 
+let hasSuppliedDefaultPluginsPrimerPrompt = false;
+let hasSuppliedResponseSummaryPrimerPrompt = false;
+let hasSuppliedBetterToolPrompt = false;
 export async function runPlugin({
   user,
   userQuery,
@@ -132,7 +136,7 @@ export async function runPlugin({
   previousMessages,
   currentAction,
 }: {
-  user: User;
+  user: UserWithProfile;
   userQuery: string;
   message: string;
   previousMessages: any[];
@@ -152,7 +156,13 @@ export async function runPlugin({
   const tool = PLUGIN_MAP[toolName];
   const toolDisplayName = PLUGIN_DISPLAY_NAME_MAP[toolName].displayName;
 
-  previousMessages.unshift(defaultPluginsPrimer);
+  console.log('toolName', toolName);
+  console.log('toolArgs', toolArgs);
+
+  if (!hasSuppliedDefaultPluginsPrimerPrompt) {
+    previousMessages.unshift(defaultPluginsPrimer);
+    hasSuppliedDefaultPluginsPrimerPrompt = true;
+  }
 
   const toolInfo = PLUGIN_DISPLAY_NAME_MAP[previousAction?.tool];
   if (!previousAction) {
@@ -237,6 +247,8 @@ export async function runPlugin({
     });
   }
 
+  // console.log('toolResult', toolResult);
+
   const toolResponseMessage = {
     role: ChatCompletionRequestMessageRoleEnum.System,
     content: CREATE_TOOL_RESULT_SUMMARY({
@@ -247,8 +259,18 @@ export async function runPlugin({
     }),
   };
 
+  let messagesWithCreateToolResultSummaryPrompt = [...previousMessages];
+  if (!hasSuppliedResponseSummaryPrimerPrompt) {
+    messagesWithCreateToolResultSummaryPrompt = [
+      ...messagesWithCreateToolResultSummaryPrompt,
+      toolResponseMessage,
+    ];
+    hasSuppliedResponseSummaryPrimerPrompt = true;
+  }
+
   const toolResponseSummary = await getChatCompletion({
-    messages: [...previousMessages, toolResponseMessage],
+    messages: messagesWithCreateToolResultSummaryPrompt,
+    temperature: 0.9,
   });
 
   const toolResponseSummaryMessage = toolResponseSummary.content;
@@ -262,17 +284,28 @@ export async function runPlugin({
     (tool) => `${tool.name}: ${tool.result}`
   ).join('\n');
 
-  const toolResponseCheckMessage = {
-    role: ChatCompletionRequestMessageRoleEnum.System,
-    content: CHECK_IF_BETTER_TOOL_PROMPT({
-      userQuery,
-      previouslyUsedTools,
-      currentResponse: toolResponseSummaryMessage,
-    }),
-  };
+  // const toolResponseCheckMessage = {
+  //   role: ChatCompletionRequestMessageRoleEnum.System,
+  //   content: CHECK_IF_BETTER_TOOL_PROMPT({
+  //     userQuery,
+  //     userBio: user.profile.data,
+  //     previouslyUsedTools,
+  //     currentResponse: toolResponseSummaryMessage,
+  //   }),
+  // };
+
+  let messagesWithCheckIfBetterToolPrompt = [...previousMessages];
+  // if (!hasSuppliedBetterToolPrompt && !hasSuppliedDefaultPluginsPrimerPrompt) {
+  //   messagesWithCheckIfBetterToolPrompt = [
+  //     ...messagesWithCheckIfBetterToolPrompt,
+  //     toolResponseCheckMessage,
+  //   ];
+  //   hasSuppliedBetterToolPrompt = true;
+  //   hasSuppliedDefaultPluginsPrimerPrompt = true;
+  // }
 
   const toolResponseCheckSummary = await getChatCompletion({
-    messages: [...previousMessages, toolResponseCheckMessage],
+    messages: messagesWithCheckIfBetterToolPrompt,
   });
 
   const checkResponseMessage = toolResponseCheckSummary.content;

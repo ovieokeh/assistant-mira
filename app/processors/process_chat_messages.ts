@@ -11,6 +11,7 @@ import type { Action } from '@prisma/client';
 import { Role } from '@prisma/client';
 import createHash from '~/helpers/createHash';
 import { DEFAULT_CHAT_PROMPT } from '~/config/prompts';
+import { updateActionFlow } from '~/models/memory/action.server';
 
 export default async function processChatMessages(
   messages: WhatsappTextMessageContent[]
@@ -58,9 +59,18 @@ export default async function processChatMessages(
     const { message: actionAnalysis, action } = actionAnalysisResponse;
 
     if (action === 'refineResponse') {
+      const action = await updateActionFlow({
+        user,
+        action: {
+          name: 'Refine response',
+          tool: 'chat',
+        },
+      });
+
       return await sendWhatsappMessage({
         ...messageBody,
         text: actionAnalysis,
+        actionId: action.id,
       });
     }
 
@@ -101,7 +111,10 @@ export default async function processChatMessages(
       userId: user.id,
     });
   } catch (error: any) {
-    console.error('Error processing chat messages:', error);
+    if (error.response)
+      console.error('Error processing chat messages:', error.response.data);
+    else console.error('Error processing chat messages:', error);
+
     await sendWhatsappMessage({
       to: userNumber,
       humanText: messages[0].text.body,

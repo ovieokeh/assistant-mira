@@ -21,7 +21,9 @@ export default async function prepareChatContext({
 
   chatContext.push(
     ...messageHistory
-      .filter((message) => message?.actionId === null)
+      .filter(
+        (message) => message?.actionId === null || message.role === Role.user
+      )
       .map((message) => ({
         role: message.role,
         content: message.content,

@@ -2,7 +2,6 @@ import type {
   ChatCompletionRequestMessage,
   ChatCompletionResponseMessage,
 } from 'openai';
-import { ChatCompletionRequestMessageRoleEnum } from 'openai';
 
 import { gpt } from '~/services/gpt.server';
 
@@ -21,6 +20,8 @@ export async function getChatCompletion({
       };
     }),
   ];
+
+  // console.log('Prompt:', prompt);
 
   const { data } = await gpt.createChatCompletion({
     model: 'gpt-3.5-turbo',

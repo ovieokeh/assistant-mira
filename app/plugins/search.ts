@@ -5,8 +5,8 @@ export const pluginDescription: PluginDetail = {
   name: 'search',
   displayName: 'Bing Search API',
   description: `
-    Search for answers to any questions.
-    Returns a JSON array of answers answer to your question from the Bing search engine.
+    Search for answers to factual questions.
+    Returns a JSON array of answers from the Bing search engine.
   `,
   usage: 'search(query)',
 };
@@ -19,7 +19,7 @@ export default async function search(config: any, query: string) {
   }
 
   const sanitisedResults = searchResults.webPages.value
-    .slice(0, 5)
+    .slice(0, 3)
     .map((result) => {
       return {
         name: result.name,

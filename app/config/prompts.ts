@@ -21,6 +21,9 @@ export const DEFAULT_CHAT_PROMPT = ({
   - Name: ${name}
   - Bio: ${bio}
 
+  - When responding, use the bio information to craft more personalized responses.
+  - When searching for information, use the bio information to craft more personalized queries.
+
   Here are the tools you have access to:
   ${getAvailablePlugins()}
   These tools should override your existing knowledge.
@@ -33,14 +36,13 @@ export function GET_TOOL_FROM_MESSAGE_PROMPT() {
 
   Here are the tools you have access to:
   ${getAvailablePlugins()}
-  These tools should override your existing knowledge.
 
   - If you need to use a tool,
   - - Respond with a message that uses the tool.
   - - Behave like the response from the tool overrides your existing knowledge.
   - - Do not add the result of using the tool. Simply respond with the invocation of the tool.
 
-  - If you have to use a tool but you don't have enough information to use it as specified in the tool description,
+  - If you have to use a tool but you don't have enough information to use it as specified in the tool description
   - - Respond with Refine:<missing information>
 
   - If you do not,
@@ -71,23 +73,27 @@ export const CREATE_TOOL_RESULT_SUMMARY = ({
 
   The output of the tool is the absolute truth. You must summarise the result of the tool.
 
-  Please summarise the result of the tool.
+  Please return a detailed summary of the result of the tool.
   - You will explain to the user what tool was used
-  - If the result is a list of JSON objects, you will summarise as an objective person would
+  - If the result is a list of JSON objects, you will summarise as a helpful digital assistant
   - If the result is a direct answer, your summary will just be the same answer with no edits
   - If the result is an error message, you will summarise the error message
-  - Cite any web links used in your summary
+  - Do not mention JSON or any other technical details
+  - Speak to the user in the first person, i.e "I found this" instead of "This was found"
 
   Used tool: <tool display name>
   Result: <add your summary of the result here>
+  Sources: <add any relevant web links here>
 `;
 
 export const CHECK_IF_BETTER_TOOL_PROMPT = ({
   userQuery,
+  userBio,
   previouslyUsedTools,
   currentResponse,
 }: {
   userQuery: string;
+  userBio: string;
   previouslyUsedTools: string;
   currentResponse: string;
 }) => `
@@ -104,6 +110,8 @@ export const CHECK_IF_BETTER_TOOL_PROMPT = ({
   If no, respond with the following requirements:
   - You will explore the list of other tools you have access to
   - If you find a tool that you haven't used that you think will give a better result, you will use that tool
+  - When using any search tools, use the user's bio to craft more personalized queries
+  User bio: ${userBio}
   - Only respond with the correct invocation of the tool you want to use. Refer to the plugin description for the correct invocation.
   - If you don't find a tool that you think will give a better result, you will respond with the text "No"
 `;
