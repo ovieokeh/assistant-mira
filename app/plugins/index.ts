@@ -223,14 +223,11 @@ export async function runPlugin({
     (tool) => `${tool.name}: ${tool.result}`
   ).join('\n');
 
-  const shouldRunAgain = await compareOutputWithPrompt(
-    userQuery,
-    toolResponseSummaryMessage
-  );
+  const satisfiesPrompt =
+    toolResult?.satisfiesQuery ||
+    (await compareOutputWithPrompt(userQuery, toolResponseSummaryMessage));
 
-  console.log({ shouldRunAgain });
-
-  if (shouldRunAgain) {
+  if (!satisfiesPrompt) {
     return await runPlugin({
       user,
       userQuery,

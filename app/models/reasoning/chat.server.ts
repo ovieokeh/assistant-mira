@@ -35,6 +35,33 @@ export async function summariseToolResult(
   return toolResponseSummaryMessage;
 }
 
+export async function compareHTMLOutputWithPrompt(
+  prompt: string,
+  output: string
+): Promise<string> {
+  const messages = [
+    {
+      role: ChatCompletionRequestMessageRoleEnum.System,
+      content: `
+        You are a digital assistant.
+        You are analyzing an HTML web page and summarise the relevant content for the query: ${prompt}
+        Response: ${output}
+        
+        Follow instructions below:
+        - If the extracted summary is a reasonable response to the query, respond with only the extracted summary.
+        - Otherwise, respond with only "NO".
+      `,
+    },
+  ];
+
+  const data = await getChatCompletion({
+    messages,
+    temperature: 0,
+  });
+
+  return data.content;
+}
+
 export async function compareOutputWithPrompt(
   prompt: string,
   output: string
@@ -44,23 +71,24 @@ export async function compareOutputWithPrompt(
       role: ChatCompletionRequestMessageRoleEnum.System,
       content: `
         You are a digital assistant.
-        You are analyzing a query response and comparing it to the query.
+        You are analyzing a query response.
         
         Query: ${prompt}
         Response: ${output}
         
-        If the response answers the query, respond yes if it does, and no if it does not.
-        Your response should be a single word.
+        Follow instructions below:
+        - If the response fully or partialy answers the query, respond with "yes".
+        - If the response does not answer the query, respond with "no".
+        - Your response should be a single word.
+        - Do NOT add any additional text to your response.
       `,
     },
   ];
 
   const data = await getChatCompletion({
     messages,
-    temperature: 0.2,
+    temperature: 0,
   });
-
-  console.log('Compare output with prompt:', data);
 
   return data.content === 'yes';
 }
@@ -100,8 +128,6 @@ export async function getChatCompletion({
       };
     }),
   ];
-
-  // console.log('Prompt:', prompt);
 
   const { data } = await gpt.createChatCompletion({
     model: 'gpt-3.5-turbo',

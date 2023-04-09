@@ -66,9 +66,12 @@ export function GET_TOOL_FROM_MESSAGE_PROMPT(messagingMode: string) {
   return `
   You are an action extraction model.
   You are given a message and you must determine whether the message is a tool invocation.
-  If the message is not a tool invocation, return "Run chat".
-  If the message is a tool invocation, return "Run tool: <tool name>(<tool arguments>)".
-  If the message is a tool invocation but you don't have enough information to run the tool, return "Run refine:<missing information>".
+
+  Follow instructions below:
+  - If the message is not a tool invocation, return "Run chat".
+  - If the message is a tool invocation, return "Run tool: <tool name>(<tool arguments>)".
+  - If the message is a tool invocation but you don't have enough information to run the tool, return "Run refine:<missing information>".
+  - If the message is a request for facts/figures, prefer to run a tool instead of using your existing knowledge as you don't have access to current events.
 
   Here are the tools and their descriptions you should map to:
   ${getAvailablePlugins()}
@@ -86,22 +89,24 @@ export const CREATE_TOOL_RESULT_SUMMARY = ({
   toolName: string;
   toolResult: string;
 }) => `
-  Your job is to summaries the output of the tool "${toolDisplayName}" used to respond to the user query ${userQuery}
+  Your job is to summarise the output of "${toolDisplayName}" used to respond to my query ${userQuery}
   output: ${JSON.stringify(toolResult)}
 
-  The output of the tool is the absolute truth. You must summarise the result of the tool.
-
-  Please return a detailed summary of the result of the tool.
+  Follow instructions below:
   - If the result is a list of JSON objects, you will summarise as a helpful digital assistant
-  - If the result is a direct answer, your summary will just be the same answer with no edits
+  - If the result is a direct answer, your summary will just be the same output with no edits
   - If the result is an error message, you will summarise the error message
-  - Do not mention JSON or any other technical details
-  - Do not mention the user query
-  - Speak to the user in the first person, i.e "I found this" instead of "This was found"
+  - Do not mention JSON
+  - The summary should be in first person
 
+  Expected response format:
+  \`\`\`
   Used tool: <tool display name>
-  Result: <add your summary of the result here>
+
+  <add your summary of the result here>
+
   Sources: <add any relevant web links here>
+  \`\`\`
 `;
 
 export const CHECK_IF_BETTER_TOOL_PROMPT = ({
