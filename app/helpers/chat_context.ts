@@ -1,9 +1,9 @@
 import type { UnformattedMessage, UserWithProfile } from '~/types';
-import type { ChatCompletionRequestMessageRoleEnum } from 'openai';
+import { ChatCompletionRequestMessageRoleEnum } from 'openai';
 import { Role } from '@prisma/client';
 import { getUserMessages } from '~/models/memory/user.server';
 
-export default async function prepareChatContext({
+export async function prepareChatContext({
   user,
   newMessages,
   messageHash,
@@ -34,4 +34,31 @@ export default async function prepareChatContext({
   });
 
   return { chatContext };
+}
+
+export function prepareActionFlow({
+  messages,
+  runningArguments,
+}: {
+  messages: any[];
+  runningArguments: {
+    role: string;
+    content: string;
+  }[];
+}) {
+  return messages
+    .map((message) => {
+      const agent =
+        message.role === ChatCompletionRequestMessageRoleEnum.User
+          ? 'User'
+          : 'You';
+
+      runningArguments.push({
+        role: agent,
+        content: message.content,
+      });
+      const step = `${agent}: ${message.content}`;
+      return step;
+    })
+    .join('\n');
 }

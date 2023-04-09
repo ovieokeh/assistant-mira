@@ -1,14 +1,11 @@
-// TODO: Hash messages to prevent duplicates
-
 import type { WhatsappTextMessageContent } from '~/types';
+import { Role } from '@prisma/client';
 
 import { getUserProfile } from '~/models/memory/user.server';
 import sendWhatsappMessage from '../helpers/send_whatsapp_message';
-import prepareChatContext from '~/helpers/prepare_chat_context';
+import { prepareChatContext } from '~/helpers/chat_context';
 import { checkForActions, runPlugin } from '~/plugins';
 import { getChatCompletion } from '~/models/reasoning/chat.server';
-import type { Action } from '@prisma/client';
-import { Role } from '@prisma/client';
 import createHash from '~/helpers/createHash';
 import { DEFAULT_CHAT_PROMPT } from '~/config/prompts';
 import { updateActionFlow } from '~/models/memory/action.server';

@@ -3,9 +3,37 @@ import type {
   ChatCompletionResponseMessage,
 } from 'openai';
 import { ChatCompletionRequestMessageRoleEnum } from 'openai';
-import { GET_TOOL_FROM_MESSAGE_PROMPT } from '~/config/prompts';
+import {
+  CREATE_TOOL_RESULT_SUMMARY,
+  GET_TOOL_FROM_MESSAGE_PROMPT,
+} from '~/config/prompts';
 
 import { gpt } from '~/services/gpt.server';
+
+export async function summariseToolResult(
+  userQuery: string,
+  toolName: string,
+  toolDisplayName: string,
+  toolResult: string
+): Promise<string> {
+  const toolResponseMessage = {
+    role: ChatCompletionRequestMessageRoleEnum.System,
+    content: CREATE_TOOL_RESULT_SUMMARY({
+      userQuery,
+      toolName,
+      toolDisplayName,
+      toolResult,
+    }),
+  };
+
+  const toolResponseSummary = await getChatCompletion({
+    messages: [toolResponseMessage],
+    temperature: 0.9,
+  });
+
+  const toolResponseSummaryMessage = toolResponseSummary.content;
+  return toolResponseSummaryMessage;
+}
 
 export async function compareOutputWithPrompt(
   prompt: string,

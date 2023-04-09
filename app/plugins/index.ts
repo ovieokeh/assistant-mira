@@ -1,39 +1,29 @@
 import type { Action, User } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { ActionStatus } from '@prisma/client';
 import type { ChatCompletionRequestMessage } from 'openai';
 import type { PluginDetail, UserWithProfile } from '~/types';
 import { ChatCompletionRequestMessageRoleEnum } from 'openai';
 
-import calendar, {
-  pluginDescription as calendarPluginDescription,
-} from './calendar';
 import search, { pluginDescription as searchPluginDescription } from './search';
 import repl, { pluginDescription as replPluginDescription } from './repl';
 import {
   compareOutputWithPrompt,
   extractAction,
-  getChatCompletion,
+  summariseToolResult,
 } from '~/models/reasoning/chat.server';
-import {
-  CHECK_IF_BETTER_TOOL_PROMPT,
-  GET_TOOL_FROM_MESSAGE_PROMPT,
-  CREATE_TOOL_RESULT_SUMMARY,
-} from '~/config/prompts';
+import { REFINE_TOOL_ARGUMENTS_PROMPT } from '~/config/prompts';
 import {
   getCurrentActionFlow,
   updateActionFlow,
 } from '~/models/memory/action.server';
 import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
+import { prepareActionFlow } from '~/helpers/chat_context';
 
-export const PLUGIN_REGISTRY = [
-  calendarPluginDescription,
-  searchPluginDescription,
-  replPluginDescription,
-];
+export const PLUGIN_REGISTRY = [searchPluginDescription, replPluginDescription];
 const PLUGIN_MAP: {
   [key: string]: any;
 } = {
-  calendar,
   search,
   repl,
 };
@@ -41,7 +31,6 @@ const PLUGIN_MAP: {
 export const PLUGIN_DISPLAY_NAME_MAP: {
   [key: string]: PluginDetail;
 } = {
-  calendar: calendarPluginDescription,
   search: searchPluginDescription,
   repl: replPluginDescription,
 };
@@ -169,48 +158,30 @@ export async function runPlugin({
       (message) => message?.actionId === previousAction?.id
     );
 
-    const actionFlow = previousMessages
-      .map((message) => {
-        const agent =
-          message.role === ChatCompletionRequestMessageRoleEnum.User
-            ? 'User'
-            : 'You';
-
-        runningArguments.push({
-          role: agent,
-          content: message.content,
-        });
-        const step = `${agent}: ${message.content}`;
-        return step;
-      })
-      .join('\n');
+    const actionFlow = prepareActionFlow({
+      messages: previousMessages,
+      runningArguments,
+    });
 
     previousMessages.push(
       {
         role: ChatCompletionRequestMessageRoleEnum.System,
-        content: `
-            You are currently running the ${toolInfo.displayName} tool.
-            Here are your available tools:
-            ${getAvailablePlugins()}
-    
-            You have run the following steps:
-            ${actionFlow}
-    
-            You have the following responses to the tool's arguments from the user:
-            ${runningArguments
-              .map((arg) => `${arg.role}: ${arg.content}`)
-              .join('\n')}
-            
-            - Is the user passing arguments to the tool?
-            - - If yes and you have enough information to run the tool
-            - - - Respond with Run tool: ${
-              toolInfo.name
-            }(${runningArguments.join(', ')})
-            - - If no
-            - - - Respond with Refine:<missing information>
-            - If no and they have changed topics/tools or want to cancel the current action
-            - - Respond with Cancel
-          `,
+        content: REFINE_TOOL_ARGUMENTS_PROMPT({
+          userQuery,
+          actionFlow,
+          runningArguments: runningArguments
+            .map((arg) => `${arg.role}: ${arg.content}`)
+            .join('\n'),
+          toolInfo: {
+            name: toolInfo.name,
+            displayName: toolInfo.displayName,
+            arguments: runningArguments
+              .filter((arg) => arg.role === Role.user)
+              .map((arg) => arg.content)
+              .join(', '),
+          },
+        }),
+        actionId: previousAction.id,
       },
       ...actionContext.map((message) => ({
         role: message.role,
@@ -235,28 +206,12 @@ export async function runPlugin({
 
   // console.log('toolResult', toolResult);
 
-  const toolResponseMessage = {
-    role: ChatCompletionRequestMessageRoleEnum.System,
-    content: CREATE_TOOL_RESULT_SUMMARY({
-      userQuery,
-      toolName,
-      toolDisplayName,
-      toolResult,
-    }),
-  };
-
-  let messagesWithCreateToolResultSummaryPrompt = [...previousMessages];
-  messagesWithCreateToolResultSummaryPrompt = [
-    ...messagesWithCreateToolResultSummaryPrompt,
-    toolResponseMessage,
-  ];
-
-  const toolResponseSummary = await getChatCompletion({
-    messages: messagesWithCreateToolResultSummaryPrompt,
-    temperature: 0.9,
-  });
-
-  const toolResponseSummaryMessage = toolResponseSummary.content;
+  const toolResponseSummaryMessage = await summariseToolResult(
+    userQuery,
+    toolName,
+    toolDisplayName,
+    toolResult
+  );
   console.log('toolResponseSummaryMessage', toolResponseSummaryMessage);
 
   USED_TOOLS_RESULTS_MAPPING.push({

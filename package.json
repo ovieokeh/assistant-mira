@@ -49,6 +49,7 @@
     "googleapis": "^105.0.0",
     "got": "^12.6.0",
     "isbot": "^3.6.7",
+    "langchain": "^0.0.50",
     "morgan": "^1.10.0",
     "openai": "^3.2.1",
     "prom-client": "^14.2.0",
@@ -92,7 +93,7 @@
     "vite-tsconfig-paths": "^3.6.0"
   },
   "engines": {
-    "node": ">=14"
+    "node": ">=18"
   },
   "prisma": {
     "seed": "ts-node --require tsconfig-paths/register prisma/seed.ts"
