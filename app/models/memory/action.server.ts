@@ -3,9 +3,12 @@ import { MessagingState } from '@prisma/client';
 import { ActionStatus } from '@prisma/client';
 
 import { prisma } from '~/services/db.server';
+import type { ActionWithMessages } from '~/types';
 import { setUserMessagingState } from './user.server';
 
-export const getCurrentActionFlow = async (user: User) => {
+export const getCurrentActionFlow = async (
+  user: User
+): Promise<null | ActionWithMessages> => {
   const actionFlow = await prisma.action.findFirst({
     where: {
       userId: user.id,
@@ -38,6 +41,9 @@ export const updateActionFlow = async ({
         status: action.status || ActionStatus.PENDING,
         tool: action.tool as string,
       },
+      include: {
+        messages: true,
+      },
     });
   }
 
@@ -50,7 +56,14 @@ export const updateActionFlow = async ({
     },
   });
 
-  if (action.id && ActionStatus.COMPLETED) {
+  if (action.id && action.status !== ActionStatus.COMPLETED) {
+    setUserMessagingState({
+      phone: user.phone,
+      state: MessagingState.ACTION,
+    });
+  }
+
+  if (action.id && action.status === ActionStatus.COMPLETED) {
     setUserMessagingState({
       phone: user.phone,
       state: MessagingState.CHAT,

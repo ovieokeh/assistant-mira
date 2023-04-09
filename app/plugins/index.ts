@@ -1,23 +1,23 @@
-import type { Action, User } from '@prisma/client';
+import type { Action } from '@prisma/client';
 import { Role } from '@prisma/client';
 import { ActionStatus } from '@prisma/client';
-import type { ChatCompletionRequestMessage } from 'openai';
-import type { PluginDetail, UserWithProfile } from '~/types';
+import type {
+  ChatHistoryMessage,
+  PluginDetail,
+  UserWithProfile,
+} from '~/types';
 import { ChatCompletionRequestMessageRoleEnum } from 'openai';
 
 import search, { pluginDescription as searchPluginDescription } from './search';
 import repl, { pluginDescription as replPluginDescription } from './repl';
 import {
   compareOutputWithPrompt,
-  extractAction,
+  extractActions,
+  getChatCompletion,
   summariseToolResult,
 } from '~/models/reasoning/chat.server';
 import { REFINE_TOOL_ARGUMENTS_PROMPT } from '~/config/prompts';
-import {
-  getCurrentActionFlow,
-  updateActionFlow,
-} from '~/models/memory/action.server';
-import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
+import { updateActionFlow } from '~/models/memory/action.server';
 import { prepareActionFlow } from '~/helpers/chat_context';
 
 export const PLUGIN_REGISTRY = [searchPluginDescription, replPluginDescription];
@@ -57,95 +57,60 @@ const USED_TOOLS_RESULTS_MAPPING: {
   result: string;
 }[] = [];
 
-export async function checkForActions({
+export async function analyseForActions({
   message,
-  previousMessages,
-  currentAction,
-  user,
 }: {
   message: string;
-  previousMessages: ChatCompletionRequestMessage[];
-  currentAction?: Action;
-  user: User;
-}): Promise<any> {
-  const actionExtract = await extractAction({
+}): Promise<string[]> {
+  const actionsExtract = await extractActions({
     message,
   });
 
-  switch (actionExtract) {
-    case 'Cancel':
-      if (currentAction) {
-        await updateActionFlow({
-          user,
-          action: {
-            ...currentAction,
-            tool: currentAction.tool || 'none',
-            status: ActionStatus.CANCELLED,
-          },
-        });
-      }
-      break;
-
-    default:
-      const shouldRunTool = actionExtract.includes('Run tool');
-      const shouldRefineResponse = actionExtract.includes('Refine');
-      const shouldChat = actionExtract.includes('Chat');
-
-      return {
-        message: actionExtract,
-
-        action: shouldRunTool
-          ? 'runPlugin'
-          : shouldRefineResponse
-          ? 'refineResponse'
-          : shouldChat
-          ? 'chat'
-          : null,
-      };
-  }
+  return actionsExtract.split('\n');
 }
 
-let runningArguments: {
-  role: string;
-  content: string;
-}[] = [];
-export async function runPlugin({
-  user,
-  userQuery,
-  message,
-  previousMessages,
-  currentAction,
-}: {
-  user: UserWithProfile;
-  userQuery: string;
-  message: string;
-  previousMessages: any[];
-  currentAction?: Action;
-}): Promise<any> {
-  let previousAction: any = currentAction || (await getCurrentActionFlow(user));
-  const [, toolInvocation] = message.split('Run tool:');
-
-  if (!toolInvocation) {
-    return { message: 'No tool specified' };
-  }
-
-  const originalMessages = [...previousMessages];
-
+const getToolNameAndArgs = (toolInvocation: string) => {
   const endOfToolName = toolInvocation.indexOf('(');
   let toolName = toolInvocation.slice(0, endOfToolName);
   let toolArgs = toolInvocation.slice(endOfToolName + 2, -2);
   toolName = toolName.trim();
+  toolArgs = toolArgs.trim();
 
+  return {
+    toolName,
+    toolArgs,
+  };
+};
+
+let runningActionArguments: {
+  role: string;
+  content: string;
+}[] = [];
+export async function runAction({
+  user,
+  message,
+  chatHistory,
+  currentAction,
+}: {
+  user: UserWithProfile;
+  message: string;
+  chatHistory: ChatHistoryMessage[];
+  currentAction: Action | null;
+}): Promise<any> {
+  const [, toolInvocation] = message.split('Run tool:');
+
+  if (!toolInvocation) return 'No tool specified';
+
+  const { toolName, toolArgs } = getToolNameAndArgs(toolInvocation);
   if (!toolName) throw new Error('No tool name specified');
+
   const tool = PLUGIN_MAP[toolName];
-  const toolDisplayName = PLUGIN_DISPLAY_NAME_MAP[toolName]?.displayName;
+  const toolInfo = currentAction?.tool
+    ? PLUGIN_DISPLAY_NAME_MAP[currentAction.tool]
+    : PLUGIN_DISPLAY_NAME_MAP[toolName];
 
-  console.log('toolName', toolName);
-  console.log('toolArgs', toolArgs);
-
-  const toolInfo = PLUGIN_DISPLAY_NAME_MAP[previousAction?.tool];
-  if (!previousAction) {
-    previousAction = await updateActionFlow({
+  if (!currentAction) {
+    currentAction = await updateActionFlow({
       user,
       action: {
         name: 'Run tool',
@@ -153,42 +118,38 @@ export async function runPlugin({
         status: ActionStatus.PENDING,
       },
     });
-  } else if (previousAction && toolInfo?.name) {
-    const actionContext = previousMessages.filter(
-      (message) => message?.actionId === previousAction?.id
-    );
+  }
 
+  const originalMessages: any = [...chatHistory].filter(
+    (message) => message.actionId === currentAction?.id
+  );
+
+  // If currently refining a tool invocation arguments
+  if (currentAction && toolInfo?.name) {
     const actionFlow = prepareActionFlow({
-      messages: previousMessages,
-      runningArguments,
+      messages: originalMessages,
+      runningArguments: runningActionArguments,
     });
 
-    previousMessages.push(
-      {
-        role: ChatCompletionRequestMessageRoleEnum.System,
-        content: REFINE_TOOL_ARGUMENTS_PROMPT({
-          userQuery,
-          actionFlow,
-          runningArguments: runningArguments
-            .map((arg) => `${arg.role}: ${arg.content}`)
-            .join('\n'),
-          toolInfo: {
-            name: toolInfo.name,
-            displayName: toolInfo.displayName,
-            arguments: runningArguments
-              .filter((arg) => arg.role === Role.user)
-              .map((arg) => arg.content)
-              .join(', '),
-          },
-        }),
-        actionId: previousAction.id,
-      },
-      ...actionContext.map((message) => ({
-        role: message.role,
-        content: message.content,
-        actionId: message.actionId,
-      }))
-    );
+    originalMessages.push({
+      role: ChatCompletionRequestMessageRoleEnum.System,
+      content: REFINE_TOOL_ARGUMENTS_PROMPT({
+        userQuery: message,
+        actionFlow,
+        runningArguments: runningActionArguments
+          .map((arg) => `${arg.role}: ${arg.content}`)
+          .join('\n'),
+        toolInfo: {
+          name: tool.name,
+          displayName: tool.displayName,
+          arguments: runningActionArguments
+            .filter((arg) => arg.role === Role.user)
+            .map((arg) => arg.content)
+            .join(', '),
+        },
+      }),
+      actionId: currentAction?.id,
+    });
   }
 
   let toolResult;
@@ -196,58 +157,89 @@ export async function runPlugin({
     toolResult = await tool({ user }, toolArgs);
   } catch (error) {
     console.error('Error running tool:', error);
-
-    return await sendWhatsappMessage({
-      userId: null,
-      to: user.phone,
-      text: `Error running tool: ${error}`,
-    });
+    return 'Error running tool' + toolName;
   }
 
-  // console.log('toolResult', toolResult);
-
-  const toolResponseSummaryMessage = await summariseToolResult(
-    userQuery,
+  const summarisedResult = await summariseToolResult(
+    message,
     toolName,
-    toolDisplayName,
+    toolInfo.displayName,
     toolResult
   );
-  console.log('toolResponseSummaryMessage', toolResponseSummaryMessage);
+  console.log('toolResponseSummaryMessage', summarisedResult);
 
   USED_TOOLS_RESULTS_MAPPING.push({
-    name: toolDisplayName,
-    result: toolResponseSummaryMessage,
+    name: toolInfo.displayName,
+    result: summarisedResult,
   });
 
-  const previouslyUsedTools = USED_TOOLS_RESULTS_MAPPING.map(
-    (tool) => `${tool.name}: ${tool.result}`
-  ).join('\n');
+  // const previouslyUsedTools = USED_TOOLS_RESULTS_MAPPING.map(
+  //   (tool) => `${tool.name}: ${tool.result}`
+  // ).join('\n');
 
   const satisfiesPrompt =
     toolResult?.satisfiesQuery ||
-    (await compareOutputWithPrompt(userQuery, toolResponseSummaryMessage));
+    (await compareOutputWithPrompt(message, summarisedResult));
 
   if (!satisfiesPrompt) {
-    return await runPlugin({
+    return await runAction({
       user,
-      userQuery,
       message,
-      currentAction: previousAction,
-      previousMessages: [...originalMessages],
+      currentAction,
+      chatHistory: originalMessages,
     });
   }
 
   await updateActionFlow({
     user,
     action: {
-      ...previousAction,
+      ...currentAction,
       status: ActionStatus.COMPLETED,
     },
   });
 
   return {
-    message: toolResponseSummaryMessage,
+    message: summarisedResult,
     result: toolResult,
-    action: previousAction,
+    action: currentAction,
+    toolDisplayName: toolInfo.displayName,
   };
+}
+
+export async function getBetterResponse({
+  message,
+  baseResponse,
+  processedActionResponses,
+}: {
+  message: string;
+  baseResponse: string;
+  processedActionResponses: string;
+}) {
+  const response = await getChatCompletion({
+    messages: [
+      {
+        role: ChatCompletionRequestMessageRoleEnum.System,
+        content: `
+          Does this reasonably answer the following? ${message}
+
+          \`\`\`
+          ${processedActionResponses}
+          \`\`\`
+
+          Response format
+          - yes
+          - no
+        `,
+      },
+    ],
+  });
+
+  console.log({
+    message,
+    baseResponse,
+    processedActionResponses,
+    new: response.content,
+  });
+
+  return response.content === 'yes';
 }

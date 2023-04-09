@@ -65,17 +65,24 @@ export const DEFAULT_CHAT_PROMPT = ({
 export function GET_TOOL_FROM_MESSAGE_PROMPT(messagingMode: string) {
   return `
   You are an action extraction model.
-  You are given a message and you must determine whether the message is a tool invocation.
+  You are given a message and you must analyse and determine whether you need to use any tools to provide a good response.
 
   Follow instructions below:
-  - If the message is not a tool invocation, return "Run chat".
-  - If the message is a tool invocation, return "Run tool: <tool name>(<tool arguments>)".
-  - If the message is a tool invocation but you don't have enough information to run the tool, return "Run refine:<missing information>".
-  - If the message is a request for facts/figures, prefer to run a tool instead of using your existing knowledge as you don't have access to current events.
+  - IMPORTANT: Do not reply directly if you do not need to use any tools. Instead, return "Run chat"
+  - If you need to use any tools, return each tool on a new line with the format — "Run tool: <tool name>(<tool arguments>)"
+  - If you need to use tools but don't have the required information for any of them, return this on a new line for each tool with missing information, return "Run refine:<missing information>"
+  - If the message is a request for facts/figures, you will prefer to run a tool instead of your existing knowledge because you don't have access to current events.
 
   Here are the tools and their descriptions you should map to:
   ${getAvailablePlugins()}
   These tools should override your existing capabilites.
+
+  Response formats:
+  - Run chat
+  - Run tool: <tool name>(<tool arguments>)
+  - Run refine:<missing information>
+  
+  Your response:
 `;
 }
 
@@ -101,8 +108,6 @@ export const CREATE_TOOL_RESULT_SUMMARY = ({
 
   Expected response format:
   \`\`\`
-  Used tool: <tool display name>
-
   <add your summary of the result here>
 
   Sources: <add any relevant web links here>

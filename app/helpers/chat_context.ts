@@ -1,39 +1,39 @@
-import type { UnformattedMessage, UserWithProfile } from '~/types';
+import type {
+  ActionWithMessages,
+  ChatHistoryMessage,
+  UnformattedMessage,
+  UserWithProfile,
+} from '~/types';
 import { ChatCompletionRequestMessageRoleEnum } from 'openai';
 import { Role } from '@prisma/client';
 import { getUserMessages } from '~/models/memory/user.server';
 
-export async function prepareChatContext({
+export async function getChatHistory({
   user,
-  newMessages,
-  messageHash,
+  message,
+  currentAction,
 }: {
   user: UserWithProfile;
-  newMessages: UnformattedMessage[];
-  messageHash: number;
+  message: UnformattedMessage;
+  currentAction: null | ActionWithMessages;
 }) {
   const messageHistory = await getUserMessages({ userId: user.id });
-  const chatContext: {
-    role: ChatCompletionRequestMessageRoleEnum;
-    content: string;
-    hash?: number;
-  }[] = [];
-
-  chatContext.push(
-    ...messageHistory.map((message) => ({
-      role: message.role,
-      content: message.content,
-      actionId: message.actionId,
-    }))
-  );
-
-  chatContext.push({
+  let chatHistory: ChatHistoryMessage[] = messageHistory.map((message) => ({
+    role: message.role,
+    content: message.content,
+    actionId: message.actionId,
+    userId: message.userId,
+    hash: message.hash,
+  }));
+  const newMessage: ChatHistoryMessage = {
     role: Role.user,
-    content: newMessages[0].text.body,
-    hash: messageHash,
-  });
+    content: message.text.body,
+    actionId: null,
+    userId: user.id,
+  };
 
-  return { chatContext };
+  chatHistory.push(newMessage);
+  return { chatHistory };
 }
 
 export function prepareActionFlow({

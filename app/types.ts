@@ -1,4 +1,4 @@
-import type { User } from '@prisma/client';
+import type { Action, Message, User } from '@prisma/client';
 import type { ChatCompletionRequestMessageRoleEnum } from 'openai';
 
 export type ElementType<T extends ReadonlyArray<unknown>> =
@@ -98,4 +98,15 @@ export type PluginDetail = {
   displayName: string;
   description: string;
   usage: string;
+};
+
+export type ActionWithMessages = Action & {
+  messages: Message[];
+};
+
+export type ChatHistoryMessage = {
+  role: ChatCompletionRequestMessageRoleEnum;
+  content: string;
+  actionId: number | null;
+  userId: number | null;
 };

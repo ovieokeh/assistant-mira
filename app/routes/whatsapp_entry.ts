@@ -1,8 +1,10 @@
 import type { ActionArgs, LoaderArgs } from '@remix-run/node';
 import { json } from '@remix-run/node';
 import formatWhatsappMessages from '~/helpers/format_whatsapp_messages';
-import processAudioMessages from '~/processors/process_audio_messages';
-import processChatMessages from '~/processors/process_chat_messages';
+import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
+import { getUserProfile } from '~/models/memory/user.server';
+import { processChatMessage } from '~/processors/process_chat_message';
+import processAudioMessages from '~/processors/process_audio_message';
 import type {
   WhatsappAudioMessageContent,
   WhatsappTextMessageContent,
@@ -48,7 +50,19 @@ export async function action({ request }: ActionArgs) {
 
     const { chatMessages, audioMessages } = formatWhatsappMessages(body.entry);
 
-    await processChatMessages(chatMessages as WhatsappTextMessageContent[]);
+    const user = await getUserProfile({ phone: chatMessages[0].from });
+    if (!user)
+      return await sendWhatsappMessage({
+        to: chatMessages[0].from,
+        text: `I don't know who you are. Please register with me first at https://mira-assistant-staging.fly.dev/join`,
+        userId: null,
+      });
+
+    // await processChatMessages(chatMessages as WhatsappTextMessageContent[]);
+    await processChatMessage({
+      message: chatMessages[0] as WhatsappTextMessageContent,
+      user,
+    });
     await processAudioMessages(audioMessages as WhatsappAudioMessageContent[]);
 
     statusCode = 200;

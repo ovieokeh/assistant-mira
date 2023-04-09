@@ -48,8 +48,8 @@ export async function compareHTMLOutputWithPrompt(
         Response: ${output}
         
         Follow instructions below:
-        - If the extracted summary is a reasonable response to the query, respond with only the extracted summary.
-        - Otherwise, respond with only "NO".
+        - If the extracted summary is a reasonable response to the query, respond with only the extracted summary
+        - Otherwise, respond with only "NO"
       `,
     },
   ];
@@ -58,6 +58,8 @@ export async function compareHTMLOutputWithPrompt(
     messages,
     temperature: 0,
   });
+
+  console.log('html summary', data.content);
 
   return data.content;
 }
@@ -93,7 +95,7 @@ export async function compareOutputWithPrompt(
   return data.content === 'yes';
 }
 
-export async function extractAction({ message }: { message: string }) {
+export async function extractActions({ message }: { message: string }) {
   const messages = [
     {
       role: ChatCompletionRequestMessageRoleEnum.System,
