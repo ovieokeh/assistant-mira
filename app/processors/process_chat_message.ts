@@ -127,7 +127,7 @@ export async function processChatMessage({
 
     await sendWhatsappMessage({
       to: phoneNumber,
-      text: `I'm running ${toolInfo?.displayName} with this input ${toolArgs}`,
+      text: `Give me a moment while I'm thinking about your request...`,
       humanText: message.text.body,
       actionId: currentAction?.id,
       userId: user.id,
