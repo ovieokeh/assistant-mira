@@ -14,14 +14,13 @@ import summarise, {
   pluginDescription as summarisePluginDescription,
 } from './summarise';
 import {
-  compareOutputWithPrompt,
-  extractActions,
+  checkIfToolOutputIsValid,
   getChatCompletion,
   summariseToolResult,
 } from '~/models/reasoning/chat.server';
-import { REFINE_TOOL_ARGUMENTS_PROMPT } from '~/config/prompts';
 import { updateActionFlow } from '~/models/memory/action.server';
 import { prepareActionFlow } from '~/helpers/chat_context';
+import { PROMPTS, buildPrompt } from '~/config/prompts';
 
 export const PLUGIN_REGISTRY = [
   searchPluginDescription,
@@ -61,49 +60,9 @@ export function getPluginDetail(detail: PluginDetail) {
     `;
 }
 
-const USED_TOOLS_RESULTS_MAPPING: {
-  name: string;
-  result: string;
-}[] = [];
-
-export async function analyseForActions({
-  message,
-  chatHistory,
-}: {
-  message: string;
-  chatHistory: ChatHistoryMessage[];
-}): Promise<string[]> {
-  const actionsExtract = await extractActions({
-    message,
-    chatHistory: chatHistory
-      .map((chat) => `${chat.role}: ${chat.content}`)
-      .join('\n'),
-  });
-
-  return actionsExtract.split('\n');
-}
-
-export const getToolNameAndArgs = (message: string) => {
-  const [, toolInvocation] = message.split('Run tool:');
-  if (!toolInvocation)
-    return {
-      toolName: '',
-      toolArgs: '',
-      toolInfo: {
-        name: '',
-        displayName: '',
-        description: '',
-      },
-    };
-
-  const endOfToolName = toolInvocation.indexOf('(');
-  let toolName = toolInvocation.slice(0, endOfToolName);
-  let toolArgs = toolInvocation.slice(endOfToolName + 1, -1);
-  toolName = toolName.trim();
-  toolArgs = toolArgs.trim();
-
-  const toolInfo = toolName
-    ? PLUGIN_DISPLAY_NAME_MAP[toolName]
+export const getToolNameAndArgs = (name: string, args: any[]) => {
+  const info = name
+    ? PLUGIN_DISPLAY_NAME_MAP[name]
     : {
         name: '',
         displayName: '',
@@ -111,57 +70,53 @@ export const getToolNameAndArgs = (message: string) => {
       };
 
   return {
-    toolName,
-    toolArgs,
-    toolInfo,
+    name,
+    args,
+    info,
   };
 };
 
-let numOfRefinements = 0;
-const MAX_REFINEMENTS = 3;
-let runningActionArguments: {
-  role: string;
-  content: string;
-}[] = [];
 export async function runAction({
   user,
-  actionInvocation,
+  action,
   message,
   chatHistory,
   currentAction,
 }: {
   user: UserWithProfile;
   message: string;
-  actionInvocation: {
+  action: {
     name: string;
-    args: string;
+    parameters: string[];
     info: PluginDetail;
   };
   chatHistory: ChatHistoryMessage[];
   currentAction: Action | null;
-}): Promise<any> {
-  const { name, args, info: tool } = actionInvocation;
+}): Promise<{
+  createdAction?: Action;
+  satisfiesQuery: boolean;
+  message: string;
+}> {
+  const { name, parameters, info } = action;
+  if (!name || !info?.name || !info?.displayName)
+    return {
+      satisfiesQuery: false,
+      message: 'No tool found',
+    };
 
-  if (!name || !tool?.name || !tool?.displayName) return 'No tool found';
+  const userQuery = message;
 
-  if (!currentAction) {
-    console.info('Creating new action flow');
-    currentAction = await updateActionFlow({
-      user,
-      action: {
-        name: 'Run tool',
-        tool: name,
-        status: ActionStatus.PENDING,
-      },
-    });
-  }
+  let runningActionArguments: {
+    role: string;
+    content: string;
+  }[] = []; // TODO: Get from DB
 
   const originalMessages: any = [...chatHistory].filter(
     (message) => message.actionId === currentAction?.id
   );
 
   // If currently refining a tool invocation arguments
-  if (currentAction && tool?.name) {
+  if (currentAction && info.name) {
     const actionFlow = prepareActionFlow({
       messages: originalMessages,
       runningArguments: runningActionArguments,
@@ -169,102 +124,93 @@ export async function runAction({
 
     originalMessages.push({
       role: ChatCompletionRequestMessageRoleEnum.System,
-      content: REFINE_TOOL_ARGUMENTS_PROMPT({
-        userQuery: message,
-        actionFlow,
-        runningArguments: runningActionArguments
-          .map((arg) => `${arg.role}: ${arg.content}`)
-          .join('\n'),
-        toolInfo: {
-          name: tool.name,
-          displayName: tool.displayName,
-          arguments: runningActionArguments
-            .filter((arg) => arg.role === Role.user)
-            .map((arg) => arg.content)
-            .join(', '),
+      content: buildPrompt({
+        type: PROMPTS.REFINE_TOOL_PARAMETERS_PROMPT.name,
+        args: {
+          userQuery,
+          actionFlow,
+          runningParameters: runningActionArguments
+            .map((arg) => `${arg.role}: ${arg.content}`)
+            .join('\n'),
+          toolInfo: {
+            name: info.name,
+            displayName: info.displayName,
+            parameters: runningActionArguments
+              .filter((arg) => arg.role === Role.user)
+              .map((arg) => arg.content)
+              .join(', '),
+          },
         },
       }),
       actionId: currentAction?.id,
     });
   }
 
-  const toolFn = PLUGIN_MAP[tool?.name];
+  let parsedParameters = parameters;
+  try {
+    parsedParameters = JSON.parse(parameters.join(', '));
+  } catch (error) {
+    console.error('Error parsing parameters:', parameters);
+  }
+
+  const toolFn = PLUGIN_MAP[info.name];
   let toolResult;
   try {
-    console.info('Running tool:', tool?.name);
-    toolResult = await toolFn({ user }, args);
+    console.info('Running tool:', info.name);
+    toolResult = await toolFn({ user }, parsedParameters);
   } catch (error) {
     console.error('Error running tool:', error);
-    return 'Error running tool' + name;
+    return {
+      satisfiesQuery: false,
+      message: 'Error running tool',
+    };
   }
 
-  console.info('Summarising tool result');
-  const summarisedResult = await summariseToolResult(
-    message,
-    name,
-    tool.displayName,
-    toolResult
+  const stringifiedResult = Object.entries(toolResult)
+    .filter(([key]) => key !== 'satisfiesQuery')
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('\n');
+
+  const summaryWithInfo = toolResult.summary
+    ? `${info.displayName} result: \n ${toolResult.summary}`
+    : '';
+
+  const summarisedResult =
+    summaryWithInfo ||
+    (await summariseToolResult(userQuery, info.displayName, stringifiedResult));
+
+  const previousResults = runningActionArguments.length
+    ? runningActionArguments.map((t) => `${t.role}: ${t.content}`).join('\n')
+    : '';
+
+  const finalSummary =
+    typeof summarisedResult === 'string'
+      ? summarisedResult
+      : summarisedResult.summary;
+  const actionResult = await checkIfToolOutputIsValid(
+    userQuery,
+    finalSummary,
+    previousResults,
+    info.displayName
   );
 
-  const response = {
-    message: summarisedResult,
-    result: toolResult,
-    action: currentAction,
-    toolDisplayName: tool.displayName,
-  };
-
-  USED_TOOLS_RESULTS_MAPPING.push({
-    name: tool.displayName,
-    result: summarisedResult,
-  });
-
-  // const previouslyUsedTools = USED_TOOLS_RESULTS_MAPPING.map(
-  //   (tool) => `${tool.name}: ${tool.result}`
-  // ).join('\n');
-
-  console.info('Comparing tool result with prompt');
-  const satisfiesPrompt =
-    toolResult?.satisfiesQuery ||
-    (await compareOutputWithPrompt(message, summarisedResult));
-
-  if (!satisfiesPrompt) {
-    numOfRefinements++;
-    if (numOfRefinements > MAX_REFINEMENTS) {
-      console.info('Max number of refinements reached');
-      numOfRefinements = 0;
-      await updateActionFlow({
-        user,
-        action: {
-          ...currentAction,
-          status: ActionStatus.FAILED,
-        },
-      });
-
-      return response;
-    }
-
-    return await runAction({
-      user,
-      message,
-      currentAction,
-      chatHistory: originalMessages,
-      actionInvocation,
-    });
-  }
-
-  console.info('Tool result satisfies prompt');
   await updateActionFlow({
     user,
     action: {
-      ...currentAction,
-      status: ActionStatus.COMPLETED,
+      id: currentAction?.id,
+      status: actionResult.satisfiesQuery
+        ? ActionStatus.COMPLETED
+        : ActionStatus.FAILED,
     },
   });
 
-  return response;
+  return {
+    ...actionResult,
+    message: finalSummary,
+  };
 }
 
-export async function getBetterResponse({
+export async function checkIfActionsResponseIsValid({
   message,
   processedActionResponses,
 }: {
@@ -276,19 +222,27 @@ export async function getBetterResponse({
       {
         role: ChatCompletionRequestMessageRoleEnum.System,
         content: `
-          Does this reasonably answer the following? ${message}
+          Does the following message reasonably answer "${message}"?
 
-          \`\`\`
-          ${processedActionResponses}
-          \`\`\`
+          message: ${processedActionResponses}
 
-          Response format
-          - yes
-          - no
+          - Only return a valid JSON object with no explanations, instructions, apologies, or any other text
+
+          Response format (Valid JSON object) —
+          {
+            "satisfiesQuery": true | false,
+          }/end
         `,
       },
     ],
   });
 
-  return response.content === 'yes';
+  const regexToReplaceResponseToolChat = /Response: |Tool|Chat|\n/g;
+
+  let cleanedJSON: any = response.content.replace(
+    regexToReplaceResponseToolChat,
+    ''
+  );
+  cleanedJSON = JSON.parse(cleanedJSON) as { satisfiesQuery: boolean };
+  return cleanedJSON.satisfiesQuery;
 }

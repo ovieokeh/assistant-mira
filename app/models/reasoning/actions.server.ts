@@ -1,9 +1,9 @@
 import { createReadStream, createWriteStream } from 'fs';
 import https from 'https';
 
-import { TRANSCRIPTION_PROMPT } from '~/config/prompts';
 import { gpt } from '~/services/gpt.server';
 import exec from '~/helpers/exec';
+import { PROMPTS, buildPrompt } from '~/config/prompts';
 
 const generateRandomId = () => Math.random().toString(36).substring(2, 15);
 
@@ -21,7 +21,10 @@ export async function createTranscription({ audioUrl }: { audioUrl: string }) {
           const transcription = await gpt.createTranscription(
             audioFileBuffer as any,
             'whisper-1',
-            TRANSCRIPTION_PROMPT,
+            buildPrompt({
+              type: PROMPTS.TRANSCRIPTION_PROMPT.name,
+              args: '',
+            }),
             'text',
             0.5
           );

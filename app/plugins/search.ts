@@ -5,18 +5,16 @@ import summarise from './summarise';
 
 export const pluginDescription: PluginDetail = {
   name: 'search',
-  displayName: 'Web Search API',
+  displayName: 'Web Search',
   description: `
     Search for answers to factual questions.
-    Returns an AI summary of a Bing web search for the query.
+    IMPORTANT: Do not use at the same time with the "summarise" tool.
   `,
   usage: 'search(query)',
 };
 
 export default async function search(config: any, query: string) {
   const searchResults = await searchApi(query);
-
-  console.log('searchResults', searchResults);
 
   if (!searchResults?.webPages?.value.length) {
     return 'No results found.';
@@ -38,14 +36,14 @@ export default async function search(config: any, query: string) {
     if (!url) continue;
 
     const pageSummary = await summarise({}, url);
-    if (!pageSummary) continue;
+    if (!pageSummary.summary) continue;
 
-    const information = await compareHTMLOutputWithPrompt(query, pageSummary);
-    // Regex to remove any special characters and numbers
-    const regex = /[^a-zA-Z ]/g;
-    const informationWithoutSpecialCharacters = information.replace(regex, '');
-    const satisfiesQuery =
-      informationWithoutSpecialCharacters.toUpperCase() !== 'NO';
+    const information = await compareHTMLOutputWithPrompt(
+      query,
+      pageSummary.summary
+    );
+
+    const satisfiesQuery = information.satisfiesQuery;
 
     visitedUrls.add(url);
 
@@ -55,7 +53,11 @@ export default async function search(config: any, query: string) {
         information,
         finalUrl: url,
         visitedUrls: [...visitedUrls],
-        satisfiesQuery: true,
+        shouldSummarise: false,
+        summary: `${information.message}
+Sources:
+${[...visitedUrls].map((url) => '- ' + url).join('\n')}
+        `,
       };
     }
   }

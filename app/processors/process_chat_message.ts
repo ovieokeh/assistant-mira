@@ -34,10 +34,12 @@
 
 import type { UserWithProfile, WhatsappTextMessageContent } from '~/types';
 import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
-import { getChatCompletion } from '~/models/reasoning/chat.server';
 import {
-  analyseForActions,
-  getBetterResponse,
+  extractActions,
+  getChatCompletion,
+} from '~/models/reasoning/chat.server';
+import {
+  checkIfActionsResponseIsValid,
   getToolNameAndArgs,
   runAction,
 } from '~/plugins';
@@ -47,8 +49,8 @@ import {
   updateActionFlow,
 } from '~/models/memory/action.server';
 import { ActionStatus } from '@prisma/client';
-import { DEFAULT_CHAT_PROMPT } from '~/config/prompts';
 import { ChatCompletionRequestMessageRoleEnum } from 'openai';
+import { PROMPTS, buildPrompt } from '~/config/prompts';
 
 export async function processChatMessage({
   message,
@@ -61,7 +63,7 @@ export async function processChatMessage({
   const phoneNumber = message.from;
 
   console.info('Getting current action flow');
-  const currentAction = await getCurrentActionFlow(user);
+  let currentAction = await getCurrentActionFlow(user);
   console.info('Getting chat history');
   const { chatHistory } = await getChatHistory({
     user,
@@ -73,9 +75,12 @@ export async function processChatMessage({
     messages: [
       {
         role: ChatCompletionRequestMessageRoleEnum.System,
-        content: DEFAULT_CHAT_PROMPT({
-          name: user.name,
-          bio: user.profile?.data,
+        content: buildPrompt({
+          type: PROMPTS.DEFAULT_CHAT_PROMPT.name,
+          args: {
+            name: user.name,
+            bio: user.profile?.data,
+          },
         }),
       },
       ...chatHistory,
@@ -83,12 +88,16 @@ export async function processChatMessage({
   });
 
   console.info('Analysing message for actions');
-  const actionAnalysis = await analyseForActions({
+  const actionAnalysis = await extractActions({
     message: message.text.body,
-    chatHistory,
+    chatHistory: chatHistory
+      .map((chat) => `${chat.role}: ${chat.content}`)
+      .join('\n'),
   });
 
-  if (actionAnalysis[0] === 'Run chat') {
+  console.log({ actionAnalysis });
+
+  if (actionAnalysis.action === 'chat') {
     console.log('run chat');
     return await sendWhatsappMessage({
       to: phoneNumber,
@@ -99,73 +108,76 @@ export async function processChatMessage({
     });
   }
 
-  if (actionAnalysis[0] === 'Refine chat') {
+  if (actionAnalysis.action === 'refine') {
     console.info('Refining current action flow');
     // construct refine message and send to user
   }
 
-  if (actionAnalysis[0] === 'Cancel') {
-    console.info('Cancelling current action flow');
-    await updateActionFlow({
-      user,
-      action: {
-        ...currentAction,
-        tool: currentAction?.tool || 'none',
-        status: ActionStatus.CANCELLED,
-      },
-    });
-
-    // send message to user
-  }
-
-  const actionResponses = [];
-  for (const action of actionAnalysis) {
-    const { toolName, toolArgs, toolInfo } = getToolNameAndArgs(action);
-    if (!toolName || !toolInfo?.name || !toolInfo?.displayName) continue;
-
-    console.log(`Running ${toolInfo?.displayName} with this input ${toolArgs}`);
-
-    await sendWhatsappMessage({
+  const {
+    name,
+    args: parameters,
+    info,
+  } = getToolNameAndArgs(
+    actionAnalysis.tool.name,
+    actionAnalysis.tool.parameters
+  );
+  if (!name || !info?.name || !info?.displayName)
+    return await sendWhatsappMessage({
       to: phoneNumber,
-      text: `Give me a moment while I'm thinking about your request...`,
+      text: baseResponse.content,
       humanText: message.text.body,
       actionId: currentAction?.id,
       userId: user.id,
     });
 
-    const { message: actionMessage, toolDisplayName } = await runAction({
+  if (!currentAction?.id) {
+    console.info('Creating new action flow');
+    currentAction = await updateActionFlow({
       user,
-      message: action,
-      actionInvocation: {
-        name: toolName,
-        args: toolArgs,
-        info: toolInfo,
+      action: {
+        name: 'Run tool',
+        tool: name,
+        status: ActionStatus.PENDING,
       },
-      chatHistory,
-      currentAction,
     });
-
-    actionResponses.push({ message: actionMessage, toolDisplayName });
   }
 
-  const processedActionResponses = actionResponses
-    .map((actionResponse) => {
-      const { message: actionMessage } = actionResponse;
-      return actionMessage;
-    })
-    .join('\n');
+  await sendWhatsappMessage({
+    to: phoneNumber,
+    text: `Give me a moment while I'm thinking about your request...`,
+    humanText: message.text.body,
+    actionId: currentAction?.id,
+    userId: user.id,
+  });
 
-  console.info('Generating final response');
-  const betterResponse = await getBetterResponse({
+  console.log(
+    `Running action ${info?.displayName} with this input ${parameters.join(
+      ' '
+    )}`
+  );
+
+  const { message: actionMessage } = await runAction({
+    user,
     message: message.text.body,
-    processedActionResponses,
+    action: {
+      name,
+      parameters,
+      info,
+    },
+    chatHistory,
+    currentAction,
+  });
+
+  const betterResponse = await checkIfActionsResponseIsValid({
+    message: message.text.body,
+    processedActionResponses: actionMessage,
   });
 
   return await sendWhatsappMessage({
     actionId: currentAction?.id,
     userId: user.id,
-    text: betterResponse ? processedActionResponses : baseResponse.content,
-    humanText: actionResponses.length ? undefined : message.text.body,
+    text: betterResponse ? actionMessage : baseResponse.content,
+    humanText: actionMessage.length ? undefined : message.text.body,
     to: user.phone,
   });
 }

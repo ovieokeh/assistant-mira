@@ -3,36 +3,42 @@ import type {
   ChatCompletionResponseMessage,
 } from 'openai';
 import { ChatCompletionRequestMessageRoleEnum } from 'openai';
-import {
-  CREATE_TOOL_RESULT_SUMMARY,
-  GET_TOOL_FROM_MESSAGE_PROMPT,
-} from '~/config/prompts';
+import { PROMPTS, buildPrompt } from '~/config/prompts';
 
 import { gpt } from '~/services/gpt.server';
 
 export async function summariseToolResult(
   userQuery: string,
-  toolName: string,
   toolDisplayName: string,
   toolResult: string
-): Promise<string> {
+): Promise<{
+  summary: string;
+  sources: string;
+}> {
   const toolResponseMessage = {
     role: ChatCompletionRequestMessageRoleEnum.System,
-    content: CREATE_TOOL_RESULT_SUMMARY({
-      userQuery,
-      toolName,
-      toolDisplayName,
-      toolResult,
+    content: buildPrompt({
+      type: PROMPTS.CREATE_TOOL_RESULT_SUMMARY_PROMPT.name,
+      args: {
+        userQuery,
+        toolDisplayName,
+        toolResult,
+      },
     }),
   };
 
   const toolResponseSummary = await getChatCompletion({
     messages: [toolResponseMessage],
-    temperature: 0.9,
+    temperature: 0.1,
   });
 
-  const toolResponseSummaryMessage = toolResponseSummary.content;
-  return toolResponseSummaryMessage;
+  let toolResponseSummaryMessage = toolResponseSummary.content;
+  toolResponseSummaryMessage = toolResponseSummaryMessage.replace(
+    'Response: ',
+    ''
+  );
+
+  return JSON.parse(toolResponseSummaryMessage);
 }
 
 export async function getHTMLSummary(html: string): Promise<string> {
@@ -40,15 +46,10 @@ export async function getHTMLSummary(html: string): Promise<string> {
     messages: [
       {
         role: ChatCompletionRequestMessageRoleEnum.System,
-        content: `
-          - You are an information extraction agent.
-          - You are parsing a website's content and extracting the most important information.
-          - You are to respond with a summary of the important information.
-          - Only include the most relevant content.
-          - You are analysing the following text.
-
-          text: ${html}
-          `,
+        content: buildPrompt({
+          type: PROMPTS.EXTRACT_FROM_WEBPAGE_PROMPT.name,
+          args: html,
+        }),
       },
     ],
     temperature: 0.9,
@@ -63,12 +64,10 @@ export async function cleanHTMLSummary(html: string): Promise<string> {
     messages: [
       {
         role: ChatCompletionRequestMessageRoleEnum.System,
-        content: `
-          - You are a text summariser agent.
-          - You are summarising the following text.
-
-          text: ${html}
-          `,
+        content: buildPrompt({
+          type: PROMPTS.TEXT_SUMMARISER_PROMPT.name,
+          args: html,
+        }),
       },
     ],
     temperature: 0.9,
@@ -79,25 +78,22 @@ export async function cleanHTMLSummary(html: string): Promise<string> {
 }
 
 export async function compareHTMLOutputWithPrompt(
-  prompt: string,
+  query: string,
   output: string
-): Promise<string> {
+): Promise<{
+  satisfiesQuery?: false;
+  message?: string;
+}> {
   const messages = [
     {
       role: ChatCompletionRequestMessageRoleEnum.System,
-      content: `
-        You are a digital assistant.
-        You are analyzing a response to the query: ${prompt}
-        Response: ${output}
-        
-        Follow instructions below:
-        - If the response is not a reasonable response to the query, respond with only "NO"
-        - Otherwise, extract and summarise the relevant answer to the query: ${prompt} from the response.
-
-        Expected response format:
-        - NO
-        - your summary
-      `,
+      content: buildPrompt({
+        type: PROMPTS.VALIDATE_AND_SUMMARISE_HTML_OUTPUT_PROMPT.name,
+        args: {
+          query,
+          output,
+        },
+      }),
     },
   ];
 
@@ -106,40 +102,45 @@ export async function compareHTMLOutputWithPrompt(
     temperature: 0,
   });
 
-  return data.content;
+  const content = data.content;
+  const cleanedJSON = JSON.parse(content.replace('Response: ', ''));
+  return cleanedJSON;
 }
 
-export async function compareOutputWithPrompt(
+export async function checkIfToolOutputIsValid(
   prompt: string,
-  output: string
-): Promise<boolean> {
+  output: string,
+  previousOutputs: string,
+  toolDisplayName: string
+): Promise<{
+  satisfiesQuery: false;
+  message: string;
+}> {
   const messages = [
     {
       role: ChatCompletionRequestMessageRoleEnum.System,
-      content: `
-        You are a digital assistant.
-        You are analyzing a query response.
-        
-        Query: ${prompt}
-        Response: ${output}
-        
-        Instructions:
-        - If the response fully or partialy answers the query, respond with "yes".
-        - If the response does not answer the query, respond with "no".
-
-        Expected response format:
-        - yes
-        - no
-      `,
+      content: buildPrompt({
+        type: PROMPTS.CHECK_IF_TOOL_RESULT_SATISFIES_PROMPT.name,
+        args: {
+          query: prompt,
+          previousOutputs,
+          currentResponse: output,
+          toolDisplayName,
+        },
+      }),
     },
   ];
 
   const data = await getChatCompletion({
     messages,
-    temperature: 0,
+    temperature: 0.1,
+    stop: '/end',
   });
 
-  return data.content === 'yes';
+  const regexToReplaceResponseToolChat = /Response: |Tool|Chat/g;
+
+  const cleanedJSON = data.content.replace(regexToReplaceResponseToolChat, '');
+  return JSON.parse(cleanedJSON);
 }
 
 export async function extractActions({
@@ -148,32 +149,112 @@ export async function extractActions({
 }: {
   message: string;
   chatHistory: string;
-}) {
+}): Promise<
+  | {
+      action: 'chat';
+    }
+  | {
+      action: 'tool';
+      tool: {
+        name: string;
+        parameters: string[];
+      };
+    }
+  | {
+      action: 'refine';
+      tool: {
+        name: string;
+        message: string;
+        parameters: string[];
+      };
+    }
+> {
   const messages = [
     {
       role: ChatCompletionRequestMessageRoleEnum.System,
-      content: GET_TOOL_FROM_MESSAGE_PROMPT(chatHistory),
+      content: buildPrompt({
+        type: PROMPTS.GET_TOOL_FROM_MESSAGE_PROMPT.name,
+        args: chatHistory,
+      }),
     },
     {
       role: ChatCompletionRequestMessageRoleEnum.User,
-      content: message,
+      content: `
+      Follow instructions below:
+      - Respond with the appropriate action for the user message - "${message}"
+      - If it is a chat message, return { "action": "chat" }
+      - If you need to use a tool, return the following response like so (only use one tool at a time) — {
+        "action": "tool",
+        "tool": {
+          "name": "<tool name>",
+          "parameters": [<tool parameters>]
+        }
+      }
+      - If you need to use a tool but don't have the required information for it, respond  {
+        "action": "refine",
+        "tool": {
+          "name": "<tool name>",
+          "message": "<missing information>"
+          "parameters": [<tool parameters>]
+        }
+      }
+      - If the message is a request that requires knowledge of current date/events, you will prefer to run a tool instead of your existing knowledge because you don't have access to current events.
+      - Response must be valid JSON that can be parsed by the JSON.parse() function (don't add apologies, confirmations, explanations, instructions, or any other text etc. Just raw JSON)
+
+      Example:
+      message: "What is the current price of bitcoin?"
+      response: {
+        "action": "tool",
+        "tool": [
+          {
+            "name": "search",
+            "parameters": ["current price of bitcoin"]
+          }
+        ]
+      }/end
+      message: "Hi there"
+      response: {
+        "action": "chat",
+      }/end
+      message: "Do you know the muffin man?"
+      response: {
+        "action": "chat",
+      }/end
+      message: "Do you know the children of time book?"
+      response: {
+        "action": "chat",
+      }/end
+
+      message: ${message}
+      response:
+      `,
     },
   ];
 
   const data = await getChatCompletion({
     messages,
-    temperature: 0.2,
+    temperature: 0.1,
+    stop: '/end',
   });
 
-  return data.content;
+  let cleanedJSON: any = {
+    action: 'chat',
+  };
+  try {
+    cleanedJSON = JSON.parse(data.content.replace('Response: ', ''));
+  } catch (error) {}
+
+  return cleanedJSON;
 }
 
 export async function getChatCompletion({
   messages,
   temperature = 0.1,
+  stop = '',
 }: {
   messages: ChatCompletionRequestMessage[];
   temperature?: number;
+  stop?: string;
 }): Promise<ChatCompletionResponseMessage> {
   const prompt = [
     ...messages.map((message) => {
@@ -185,7 +266,7 @@ export async function getChatCompletion({
     {
       role: ChatCompletionRequestMessageRoleEnum.System,
       content:
-        'Ensure to format the summary using punctuation, linebreaks, and capitalisation.',
+        'Important: Ensure to format the summary using punctuation, linebreaks, and capitalisation.',
     },
   ];
 
@@ -193,6 +274,7 @@ export async function getChatCompletion({
     model: 'gpt-3.5-turbo',
     messages: prompt,
     temperature,
+    stop,
   });
 
   const response = data.choices[0].message;

@@ -54,6 +54,9 @@ export const updateActionFlow = async ({
     data: {
       status: action.status,
     },
+    include: {
+      messages: true,
+    },
   });
 
   if (action.id && action.status !== ActionStatus.COMPLETED) {

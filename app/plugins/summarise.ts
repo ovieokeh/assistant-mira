@@ -1,4 +1,5 @@
 import { fetch } from '@remix-run/web-fetch';
+import axios from 'axios';
 import { load } from 'cheerio';
 import {
   cleanHTMLSummary,
@@ -8,21 +9,28 @@ import type { PluginDetail } from '~/types';
 
 export const pluginDescription: PluginDetail = {
   name: 'summarise',
-  displayName: 'Page Summariser',
+  displayName: 'URL Summariser',
   description: `
-    Allows you to visit a webpage and extract a detailed summary of the content.
+    Extracts the main content from a webpage.
     Includes any relevant links.
+    IMPORTANT: Do not use at the same time with the "search" tool.
   `,
   usage: 'summarise(url)',
 };
 
-export default async function summarise(config: any, url: string) {
-  if (!url) return 'Please provide a url to summarise';
+export default async function summarise(
+  config: any,
+  url: string
+): Promise<{
+  summary?: string;
+  error?: string;
+}> {
+  if (!url) return { error: 'Please provide a url to summarise' };
   const chunkSize = 15000;
 
   const html = await getPageContent({ url });
 
-  if (!html) return 'Unable to extract webpage from URL';
+  if (!html) return { error: 'Unable to extract webpage from URL' };
 
   let chunksSummaries = [];
   const htmlLength = html.length;
@@ -33,19 +41,26 @@ export default async function summarise(config: any, url: string) {
     const chunkSummary = await getHTMLSummary(chunk);
     chunksSummaries.push(chunkSummary);
 
-    console.log('Chunk', i, 'summarised');
+    console.log('web page chunk', i + 1, 'summarised');
   }
 
   const rawSummary = chunksSummaries.join(' ');
   const summary = await cleanHTMLSummary(rawSummary);
 
-  return summary;
+  return {
+    summary,
+  };
 }
 
 async function getPageContent({ url }: { url: string }) {
-  console.log('Browsing: ', url);
-  const response = await fetch(url);
-  const body = await response.text();
+  console.log('browsing: ', url);
+  const response = await axios(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'text/html',
+    },
+  });
+  const body = await response.data;
 
   const $ = load(body);
   const elements = ['h1', 'h2', 'h3', 'h4', 'p'];
@@ -54,5 +69,8 @@ async function getPageContent({ url }: { url: string }) {
     text += $(element).text();
   }
 
-  return text.replace(/[^\w ]/g, '');
+  const regexToValidateOnlyText = /^[a-zA-Z0-9:/_-\s]*$/g;
+  text = text.replace(regexToValidateOnlyText, '');
+
+  return text;
 }
