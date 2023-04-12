@@ -11,7 +11,6 @@ import { getUserMessages } from '~/models/memory/user.server';
 export async function getChatHistory({
   user,
   message,
-  currentAction,
 }: {
   user: UserWithProfile;
   message: UnformattedMessage;

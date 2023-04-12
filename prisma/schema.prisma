@@ -101,4 +101,5 @@ enum ActionStatus {
   PENDING
   CANCELLED
   COMPLETED
+  FAILED
 }

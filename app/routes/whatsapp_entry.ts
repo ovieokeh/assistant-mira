@@ -49,20 +49,18 @@ export async function action({ request }: ActionArgs) {
     }
 
     const { chatMessages, audioMessages } = formatWhatsappMessages(body.entry);
+    const message = chatMessages[0] as WhatsappTextMessageContent;
 
-    const user = await getUserProfile({ phone: chatMessages[0].from });
+    const user = await getUserProfile({ phone: message.from });
     if (!user)
       return await sendWhatsappMessage({
-        to: chatMessages[0].from,
+        to: message.from,
         text: `I don't know who you are. Please register with me first at https://mira-assistant-staging.fly.dev/join`,
+        humanText: message.text.body,
         userId: null,
       });
 
-    // await processChatMessages(chatMessages as WhatsappTextMessageContent[]);
-    await processChatMessage({
-      message: chatMessages[0] as WhatsappTextMessageContent,
-      user,
-    });
+    await processChatMessage({ message, user });
     await processAudioMessages(audioMessages as WhatsappAudioMessageContent[]);
 
     statusCode = 200;

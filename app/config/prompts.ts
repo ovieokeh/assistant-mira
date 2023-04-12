@@ -1,38 +1,5 @@
-import { PromptTemplate } from 'langchain';
 import { getAvailablePlugins } from '~/plugins';
 import { DEFAULT_PERSONALITY_TRAITS } from './traits';
-
-const DEFAULT_CHAT_TEMPLATE = `
-You are a digital assistant called Mira.
-Always respond like an assistant with the following traits: {personalityTraits}
-
-This is the info of the person you're chatting with:
-Name: {userName}
-Bio: {userBio}
-
-When responding, use the bio information to craft more personalized responses.
-When searching for information, use the bio information to craft more personalized queries.
-`;
-export const DEFAULT_AI_PROMPT = new PromptTemplate({
-  template: DEFAULT_CHAT_TEMPLATE,
-  inputVariables: ['personalityTraits', 'userName', 'userBio'],
-});
-
-const EXTRACT_TOOL_USE_TEMPLATE = `
-You are an action extraction model.
-You are given a message and you must determine whether the message is a tool invocation.
-If the message is not a tool invocation, return "Run chat".
-If the message is a tool invocation, return "Run tool: <tool name>(<tool arguments>)".
-If the message is a tool invocation but you don't have enough information to run the tool, return "Run refine:<missing information>".
-
-Here are the tools and their descriptions you should map to:
-{availableTools}
-These tools should override your existing capabilites.
-`;
-export const EXTRACT_TOOL_USE_PROMPT = new PromptTemplate({
-  template: EXTRACT_TOOL_USE_TEMPLATE,
-  inputVariables: ['availableTools'],
-});
 
 export const DEFAULT_CHAT_PROMPT = ({
   name,
@@ -41,31 +8,21 @@ export const DEFAULT_CHAT_PROMPT = ({
   name: string;
   bio: string;
 }) => `
-  You are a digital assistant called Mira..
-  Respond with a message that uses your existing knowledge of the user.
-  You are an AI model learning how to use tools.
-  You are given a list of tools and a description of how to use them.
-  When responding to queries, always prefer to try running a tool instead of using your existing knowledge.
-  Respond with the following personality Traits: ${DEFAULT_PERSONALITY_TRAITS.join(
+  - You are a ${DEFAULT_PERSONALITY_TRAITS.join(
     ', '
-  )}
-
-  This is the info of the person you're chatting with:
+  )} digital assistant called Mira.
+  - You have access to the information of the person you're chatting with that you use to write more personalised responses.
   Name: ${name}
   Bio: ${bio}
-
-  When responding, use the bio information to craft more personalized responses.
-  When searching for information, use the bio information to craft more personalized queries.
-
-  Here are the tools you have access to:
-  ${getAvailablePlugins()}
-  These tools should override your existing knowledge.
 `;
 
-export function GET_TOOL_FROM_MESSAGE_PROMPT(messagingMode: string) {
+export function GET_TOOL_FROM_MESSAGE_PROMPT(chatHistory: string) {
   return `
   You are an action extraction model.
   You are given a message and you must analyse and determine whether you need to use any tools to provide a good response.
+  You will take into account the previous messages in the chat to determine which arguments to use.
+
+  Previous messages: ${chatHistory}
 
   Follow instructions below:
   - IMPORTANT: Do not reply directly if you do not need to use any tools. Instead, return "Run chat"
@@ -77,7 +34,7 @@ export function GET_TOOL_FROM_MESSAGE_PROMPT(messagingMode: string) {
   ${getAvailablePlugins()}
   These tools should override your existing capabilites.
 
-  Response formats:
+  Expected response format:
   - Run chat
   - Run tool: <tool name>(<tool arguments>)
   - Run refine:<missing information>
@@ -140,6 +97,10 @@ export const CHECK_IF_BETTER_TOOL_PROMPT = ({
   - When using any search tools, use the user's bio to craft more personalized queries
   User bio: ${userBio}
   - If you don't find a tool that you think will give a better result, you will respond with the text "Yes"
+
+  Expected response format:
+  - Yes
+  - Run tool: <tool name>(<tool arguments>)
 `;
 
 export const REFINE_TOOL_ARGUMENTS_PROMPT = ({
@@ -176,6 +137,11 @@ ${runningArguments}
 - - - Respond with Refine:<missing information>
 - If no and they have changed topics/tools or want to cancel the current action
 - - Respond with Cancel
+
+Expected response format:
+- Run tool: ${toolInfo.name}(${runningArguments})
+- Refine:<missing information>
+- Cancel
 `;
 
 export const TRANSCRIPTION_PROMPT = `

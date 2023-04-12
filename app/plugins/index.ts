@@ -10,6 +10,9 @@ import { ChatCompletionRequestMessageRoleEnum } from 'openai';
 
 import search, { pluginDescription as searchPluginDescription } from './search';
 import repl, { pluginDescription as replPluginDescription } from './repl';
+import summarise, {
+  pluginDescription as summarisePluginDescription,
+} from './summarise';
 import {
   compareOutputWithPrompt,
   extractActions,
@@ -20,10 +23,15 @@ import { REFINE_TOOL_ARGUMENTS_PROMPT } from '~/config/prompts';
 import { updateActionFlow } from '~/models/memory/action.server';
 import { prepareActionFlow } from '~/helpers/chat_context';
 
-export const PLUGIN_REGISTRY = [searchPluginDescription, replPluginDescription];
+export const PLUGIN_REGISTRY = [
+  searchPluginDescription,
+  summarisePluginDescription,
+  replPluginDescription,
+];
 const PLUGIN_MAP: {
   [key: string]: any;
 } = {
+  summarise,
   search,
   repl,
 };
@@ -32,6 +40,7 @@ export const PLUGIN_DISPLAY_NAME_MAP: {
   [key: string]: PluginDetail;
 } = {
   search: searchPluginDescription,
+  summarise: summarisePluginDescription,
   repl: replPluginDescription,
 };
 
@@ -59,62 +68,89 @@ const USED_TOOLS_RESULTS_MAPPING: {
 
 export async function analyseForActions({
   message,
+  chatHistory,
 }: {
   message: string;
+  chatHistory: ChatHistoryMessage[];
 }): Promise<string[]> {
   const actionsExtract = await extractActions({
     message,
+    chatHistory: chatHistory
+      .map((chat) => `${chat.role}: ${chat.content}`)
+      .join('\n'),
   });
 
   return actionsExtract.split('\n');
 }
 
-const getToolNameAndArgs = (toolInvocation: string) => {
+export const getToolNameAndArgs = (message: string) => {
+  const [, toolInvocation] = message.split('Run tool:');
+  if (!toolInvocation)
+    return {
+      toolName: '',
+      toolArgs: '',
+      toolInfo: {
+        name: '',
+        displayName: '',
+        description: '',
+      },
+    };
+
   const endOfToolName = toolInvocation.indexOf('(');
   let toolName = toolInvocation.slice(0, endOfToolName);
-  let toolArgs = toolInvocation.slice(endOfToolName + 2, -2);
+  let toolArgs = toolInvocation.slice(endOfToolName + 1, -1);
   toolName = toolName.trim();
   toolArgs = toolArgs.trim();
+
+  const toolInfo = toolName
+    ? PLUGIN_DISPLAY_NAME_MAP[toolName]
+    : {
+        name: '',
+        displayName: '',
+        description: '',
+      };
 
   return {
     toolName,
     toolArgs,
+    toolInfo,
   };
 };
 
+let numOfRefinements = 0;
+const MAX_REFINEMENTS = 3;
 let runningActionArguments: {
   role: string;
   content: string;
 }[] = [];
 export async function runAction({
   user,
+  actionInvocation,
   message,
   chatHistory,
   currentAction,
 }: {
   user: UserWithProfile;
   message: string;
+  actionInvocation: {
+    name: string;
+    args: string;
+    info: PluginDetail;
+  };
   chatHistory: ChatHistoryMessage[];
   currentAction: Action | null;
 }): Promise<any> {
-  const [, toolInvocation] = message.split('Run tool:');
+  const { name, args, info: tool } = actionInvocation;
 
-  if (!toolInvocation) return 'No tool specified';
-
-  const { toolName, toolArgs } = getToolNameAndArgs(toolInvocation);
-  if (!toolName) throw new Error('No tool name specified');
-
-  const tool = PLUGIN_MAP[toolName];
-  const toolInfo = currentAction?.tool
-    ? PLUGIN_DISPLAY_NAME_MAP[currentAction.tool]
-    : PLUGIN_DISPLAY_NAME_MAP[toolName];
+  if (!name || !tool?.name || !tool?.displayName) return 'No tool found';
 
   if (!currentAction) {
+    console.info('Creating new action flow');
     currentAction = await updateActionFlow({
       user,
       action: {
         name: 'Run tool',
-        tool: toolName,
+        tool: name,
         status: ActionStatus.PENDING,
       },
     });
@@ -125,7 +161,7 @@ export async function runAction({
   );
 
   // If currently refining a tool invocation arguments
-  if (currentAction && toolInfo?.name) {
+  if (currentAction && tool?.name) {
     const actionFlow = prepareActionFlow({
       messages: originalMessages,
       runningArguments: runningActionArguments,
@@ -152,24 +188,33 @@ export async function runAction({
     });
   }
 
+  const toolFn = PLUGIN_MAP[tool?.name];
   let toolResult;
   try {
-    toolResult = await tool({ user }, toolArgs);
+    console.info('Running tool:', tool?.name);
+    toolResult = await toolFn({ user }, args);
   } catch (error) {
     console.error('Error running tool:', error);
-    return 'Error running tool' + toolName;
+    return 'Error running tool' + name;
   }
 
+  console.info('Summarising tool result');
   const summarisedResult = await summariseToolResult(
     message,
-    toolName,
-    toolInfo.displayName,
+    name,
+    tool.displayName,
     toolResult
   );
-  console.log('toolResponseSummaryMessage', summarisedResult);
+
+  const response = {
+    message: summarisedResult,
+    result: toolResult,
+    action: currentAction,
+    toolDisplayName: tool.displayName,
+  };
 
   USED_TOOLS_RESULTS_MAPPING.push({
-    name: toolInfo.displayName,
+    name: tool.displayName,
     result: summarisedResult,
   });
 
@@ -177,19 +222,37 @@ export async function runAction({
   //   (tool) => `${tool.name}: ${tool.result}`
   // ).join('\n');
 
+  console.info('Comparing tool result with prompt');
   const satisfiesPrompt =
     toolResult?.satisfiesQuery ||
     (await compareOutputWithPrompt(message, summarisedResult));
 
   if (!satisfiesPrompt) {
+    numOfRefinements++;
+    if (numOfRefinements > MAX_REFINEMENTS) {
+      console.info('Max number of refinements reached');
+      numOfRefinements = 0;
+      await updateActionFlow({
+        user,
+        action: {
+          ...currentAction,
+          status: ActionStatus.FAILED,
+        },
+      });
+
+      return response;
+    }
+
     return await runAction({
       user,
       message,
       currentAction,
       chatHistory: originalMessages,
+      actionInvocation,
     });
   }
 
+  console.info('Tool result satisfies prompt');
   await updateActionFlow({
     user,
     action: {
@@ -198,21 +261,14 @@ export async function runAction({
     },
   });
 
-  return {
-    message: summarisedResult,
-    result: toolResult,
-    action: currentAction,
-    toolDisplayName: toolInfo.displayName,
-  };
+  return response;
 }
 
 export async function getBetterResponse({
   message,
-  baseResponse,
   processedActionResponses,
 }: {
   message: string;
-  baseResponse: string;
   processedActionResponses: string;
 }) {
   const response = await getChatCompletion({
@@ -232,13 +288,6 @@ export async function getBetterResponse({
         `,
       },
     ],
-  });
-
-  console.log({
-    message,
-    baseResponse,
-    processedActionResponses,
-    new: response.content,
   });
 
   return response.content === 'yes';

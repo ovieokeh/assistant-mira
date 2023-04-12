@@ -35,13 +35,20 @@
 import type { UserWithProfile, WhatsappTextMessageContent } from '~/types';
 import sendWhatsappMessage from '~/helpers/send_whatsapp_message';
 import { getChatCompletion } from '~/models/reasoning/chat.server';
-import { analyseForActions, getBetterResponse, runAction } from '~/plugins';
+import {
+  analyseForActions,
+  getBetterResponse,
+  getToolNameAndArgs,
+  runAction,
+} from '~/plugins';
 import { getChatHistory } from '~/helpers/chat_context';
 import {
   getCurrentActionFlow,
   updateActionFlow,
 } from '~/models/memory/action.server';
 import { ActionStatus } from '@prisma/client';
+import { DEFAULT_CHAT_PROMPT } from '~/config/prompts';
+import { ChatCompletionRequestMessageRoleEnum } from 'openai';
 
 export async function processChatMessage({
   message,
@@ -53,18 +60,32 @@ export async function processChatMessage({
   if (!message || !message?.id) return null;
   const phoneNumber = message.from;
 
+  console.info('Getting current action flow');
   const currentAction = await getCurrentActionFlow(user);
+  console.info('Getting chat history');
   const { chatHistory } = await getChatHistory({
     user,
     message,
     currentAction,
   });
+  console.info('Getting base response');
   const baseResponse = await getChatCompletion({
-    messages: chatHistory,
+    messages: [
+      {
+        role: ChatCompletionRequestMessageRoleEnum.System,
+        content: DEFAULT_CHAT_PROMPT({
+          name: user.name,
+          bio: user.profile?.data,
+        }),
+      },
+      ...chatHistory,
+    ],
   });
 
+  console.info('Analysing message for actions');
   const actionAnalysis = await analyseForActions({
     message: message.text.body,
+    chatHistory,
   });
 
   if (actionAnalysis[0] === 'Run chat') {
@@ -72,16 +93,19 @@ export async function processChatMessage({
     return await sendWhatsappMessage({
       to: phoneNumber,
       text: baseResponse.content,
+      humanText: message.text.body,
       actionId: currentAction?.id,
       userId: user.id,
     });
   }
 
   if (actionAnalysis[0] === 'Refine chat') {
+    console.info('Refining current action flow');
     // construct refine message and send to user
   }
 
   if (actionAnalysis[0] === 'Cancel') {
+    console.info('Cancelling current action flow');
     await updateActionFlow({
       user,
       action: {
@@ -96,28 +120,44 @@ export async function processChatMessage({
 
   const actionResponses = [];
   for (const action of actionAnalysis) {
-    console.log('run action');
+    const { toolName, toolArgs, toolInfo } = getToolNameAndArgs(action);
+    if (!toolName || !toolInfo?.name || !toolInfo?.displayName) continue;
+
+    console.log(`Running ${toolInfo?.displayName} with this input ${toolArgs}`);
+
+    await sendWhatsappMessage({
+      to: phoneNumber,
+      text: `I'm running ${toolInfo?.displayName} with this input ${toolArgs}`,
+      humanText: message.text.body,
+      actionId: currentAction?.id,
+      userId: user.id,
+    });
+
     const { message: actionMessage, toolDisplayName } = await runAction({
       user,
       message: action,
+      actionInvocation: {
+        name: toolName,
+        args: toolArgs,
+        info: toolInfo,
+      },
       chatHistory,
       currentAction,
     });
 
-    console.log('action message', actionMessage);
     actionResponses.push({ message: actionMessage, toolDisplayName });
   }
 
   const processedActionResponses = actionResponses
     .map((actionResponse) => {
-      const { toolDisplayName, message: actionMessage } = actionResponse;
-      return `${toolDisplayName}: ${actionMessage}`;
+      const { message: actionMessage } = actionResponse;
+      return actionMessage;
     })
     .join('\n');
 
+  console.info('Generating final response');
   const betterResponse = await getBetterResponse({
     message: message.text.body,
-    baseResponse: baseResponse.content,
     processedActionResponses,
   });
 
@@ -125,6 +165,7 @@ export async function processChatMessage({
     actionId: currentAction?.id,
     userId: user.id,
     text: betterResponse ? processedActionResponses : baseResponse.content,
+    humanText: actionResponses.length ? undefined : message.text.body,
     to: user.phone,
   });
 }

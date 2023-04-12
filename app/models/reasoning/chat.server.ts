@@ -35,6 +35,49 @@ export async function summariseToolResult(
   return toolResponseSummaryMessage;
 }
 
+export async function getHTMLSummary(html: string): Promise<string> {
+  const htmlSummary = await getChatCompletion({
+    messages: [
+      {
+        role: ChatCompletionRequestMessageRoleEnum.System,
+        content: `
+          - You are an information extraction agent.
+          - You are parsing a website's content and extracting the most important information.
+          - You are to respond with a summary of the important information.
+          - Only include the most relevant content.
+          - You are analysing the following text.
+
+          text: ${html}
+          `,
+      },
+    ],
+    temperature: 0.9,
+  });
+
+  const htmlSummaryMessage = htmlSummary.content;
+  return htmlSummaryMessage;
+}
+
+export async function cleanHTMLSummary(html: string): Promise<string> {
+  const summary = await getChatCompletion({
+    messages: [
+      {
+        role: ChatCompletionRequestMessageRoleEnum.System,
+        content: `
+          - You are a text summariser agent.
+          - You are summarising the following text.
+
+          text: ${html}
+          `,
+      },
+    ],
+    temperature: 0.9,
+  });
+
+  const summaryMessage = summary.content;
+  return summaryMessage;
+}
+
 export async function compareHTMLOutputWithPrompt(
   prompt: string,
   output: string
@@ -44,12 +87,16 @@ export async function compareHTMLOutputWithPrompt(
       role: ChatCompletionRequestMessageRoleEnum.System,
       content: `
         You are a digital assistant.
-        You are analyzing an HTML web page and summarise the relevant content for the query: ${prompt}
+        You are analyzing a response to the query: ${prompt}
         Response: ${output}
         
         Follow instructions below:
-        - If the extracted summary is a reasonable response to the query, respond with only the extracted summary
-        - Otherwise, respond with only "NO"
+        - If the response is not a reasonable response to the query, respond with only "NO"
+        - Otherwise, extract and summarise the relevant answer to the query: ${prompt} from the response.
+
+        Expected response format:
+        - NO
+        - your summary
       `,
     },
   ];
@@ -58,8 +105,6 @@ export async function compareHTMLOutputWithPrompt(
     messages,
     temperature: 0,
   });
-
-  console.log('html summary', data.content);
 
   return data.content;
 }
@@ -78,11 +123,13 @@ export async function compareOutputWithPrompt(
         Query: ${prompt}
         Response: ${output}
         
-        Follow instructions below:
+        Instructions:
         - If the response fully or partialy answers the query, respond with "yes".
         - If the response does not answer the query, respond with "no".
-        - Your response should be a single word.
-        - Do NOT add any additional text to your response.
+
+        Expected response format:
+        - yes
+        - no
       `,
     },
   ];
@@ -95,11 +142,17 @@ export async function compareOutputWithPrompt(
   return data.content === 'yes';
 }
 
-export async function extractActions({ message }: { message: string }) {
+export async function extractActions({
+  message,
+  chatHistory,
+}: {
+  message: string;
+  chatHistory: string;
+}) {
   const messages = [
     {
       role: ChatCompletionRequestMessageRoleEnum.System,
-      content: GET_TOOL_FROM_MESSAGE_PROMPT('CHAT'),
+      content: GET_TOOL_FROM_MESSAGE_PROMPT(chatHistory),
     },
     {
       role: ChatCompletionRequestMessageRoleEnum.User,
@@ -129,6 +182,11 @@ export async function getChatCompletion({
         content: message.content,
       };
     }),
+    {
+      role: ChatCompletionRequestMessageRoleEnum.System,
+      content:
+        'Ensure to format the summary using punctuation, linebreaks, and capitalisation.',
+    },
   ];
 
   const { data } = await gpt.createChatCompletion({

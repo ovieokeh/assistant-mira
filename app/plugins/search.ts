@@ -1,21 +1,22 @@
-import { fetch } from '@remix-run/web-fetch';
-import { load } from 'cheerio';
+import type { PluginDetail } from '~/types';
 import { compareHTMLOutputWithPrompt } from '~/models/reasoning/chat.server';
 import { searchApi } from '~/services/search.server';
-import type { PluginDetail } from '~/types';
+import summarise from './summarise';
 
 export const pluginDescription: PluginDetail = {
   name: 'search',
-  displayName: 'Bing Search API',
+  displayName: 'Web Search API',
   description: `
     Search for answers to factual questions.
-    Returns a JSON array of answers from the Bing search engine.
+    Returns an AI summary of a Bing web search for the query.
   `,
   usage: 'search(query)',
 };
 
 export default async function search(config: any, query: string) {
   const searchResults = await searchApi(query);
+
+  console.log('searchResults', searchResults);
 
   if (!searchResults?.webPages?.value.length) {
     return 'No results found.';
@@ -34,15 +35,17 @@ export default async function search(config: any, query: string) {
 
   for (const result of sanitisedResults) {
     const { url } = result;
-
     if (!url) continue;
 
-    const resultHTML = await getPageContent({ url });
+    const pageSummary = await summarise({}, url);
+    if (!pageSummary) continue;
 
-    if (!resultHTML) continue;
-
-    const information = await compareHTMLOutputWithPrompt(query, resultHTML);
-    const satisfiesQuery = information !== 'NO';
+    const information = await compareHTMLOutputWithPrompt(query, pageSummary);
+    // Regex to remove any special characters and numbers
+    const regex = /[^a-zA-Z ]/g;
+    const informationWithoutSpecialCharacters = information.replace(regex, '');
+    const satisfiesQuery =
+      informationWithoutSpecialCharacters.toUpperCase() !== 'NO';
 
     visitedUrls.add(url);
 
@@ -58,21 +61,4 @@ export default async function search(config: any, query: string) {
   }
 
   return 'Unable to find a satisfactory answer.';
-}
-
-async function getPageContent({ url }: { url: string }) {
-  console.log('Browsing: ', url);
-  // get html text from reddit
-  const response = await fetch(url);
-  // using await to ensure that the promise resolves
-  const body = await response.text();
-  // parse the html text and extract titles
-  const $ = load(body);
-  const elements = ['h1', 'h2', 'h3', 'h4', 'p'];
-  let text = '';
-  for (const element of elements) {
-    text += $(element).text();
-  }
-
-  return text.replace(/[^\w ]/g, '').slice(0, 2000);
 }

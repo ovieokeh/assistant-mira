@@ -94,10 +94,10 @@ export type ChatActionArgs = Record<
 >;
 
 export type PluginDetail = {
-  name: string;
-  displayName: string;
-  description: string;
-  usage: string;
+  name?: string;
+  displayName?: string;
+  description?: string;
+  usage?: string;
 };
 
 export type ActionWithMessages = Action & {
