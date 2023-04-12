@@ -32,7 +32,7 @@ export function GET_TOOL_FROM_MESSAGE_PROMPT(chatHistory: string) {
 
   Here are the tools and their descriptions you should map to:
   ${getAvailablePlugins()}
-  These tools should override your existing capabilites.
+  Rely on your internal knowledge for most questions unless you need external data like dates, figures, etc or the question is too complex or the user is asking for a specific tool.
 
   Expected response format:
   - Run chat
